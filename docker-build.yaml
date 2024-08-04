@@ -9,21 +9,16 @@ on:
       registry_url:
         required: true
         type: string
-        default: ${{ vars.REGISTRY_URL }}
       registry_username:
         required: true
         type: string
-        default: ${{ secrets.REGISTRY_USERNAME }}
       registry_password:
         required: true
         type: string
-        default: ${{ secrets.REGISTRY_PASSWORD }}
       dockerfile:
-        required: true
         type: string
         default: ./Dockerfile
       context:
-        required: true
         type: string
         default: .
 

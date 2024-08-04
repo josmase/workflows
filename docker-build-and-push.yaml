@@ -18,7 +18,7 @@ on:
         required: true
         type: string
         default: ${{ secrets.REGISTRY_PASSWORD }}
-      image-name:
+      image_name:
         required: true
         type: string
         default: ${{ github.repository }}
@@ -54,7 +54,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@dbef88086f6cef02e264edb7dbf63250c17cef6c # v5.5.0
         with:
-          images: ${{ inputs.registry_url }}/${{ inputs.image-name }}
+          images: ${{ inputs.registry_url }}/${{ inputs.image_name }}
           tags: |
             type=semver,pattern={{version}}
 
@@ -71,6 +71,6 @@ jobs:
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v1
         with:
-          subject-name: ${{ inputs.registry_url }}/${{ inputs.image-name }}
+          subject-name: ${{ inputs.registry_url }}/${{ inputs.image_name }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true

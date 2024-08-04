@@ -9,18 +9,17 @@ on:
       registry_url:
         required: true
         type: string
-      registry_username:
-        required: true
-        type: string
-      registry_password:
-        required: true
-        type: string
       dockerfile:
         type: string
         default: ./Dockerfile
       context:
         type: string
         default: .
+    secrets:
+      registry_username:
+        required: true
+      registry_password:
+        required: true
 
 jobs:
   build:
@@ -38,8 +37,8 @@ jobs:
         uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
         with:
           registry: ${{ inputs.registry_url }}
-          username: ${{ inputs.registry_username }}
-          password: ${{ inputs.registry_password }}
+          username: ${{ secrets.registry_username }}
+          password: ${{ secrets.registry_password }}
 
       - name: Build and push Docker image
         id: push

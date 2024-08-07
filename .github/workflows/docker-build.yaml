@@ -1,11 +1,11 @@
-name: Pull Request Validation
+name: Kaniko Build
 
 on:
   workflow_call:
     inputs:
       runner:
         description: |
-          The name of the runner to use for the workflow.
+          The name of the runner to use.
         required: true
         type: string
       registry_url:
@@ -14,8 +14,10 @@ on:
         required: true
         type: string
       image_name:
+        description: |
+          The name of the Docker image to be built and pushed. This typically includes the repository name.
+        required: true
         type: string
-        default: ${{ github.repository }}
       dockerfile:
         description: |
           The path to the Dockerfile used for building the Docker image.
@@ -23,19 +25,30 @@ on:
         default: "./Dockerfile"
       context:
         description: |
-          The build context directory for the Docker image.
+          The build context directory for the Docker image. This directory is used to provide files needed for the build.
         type: string
         default: "."
       cache:
         description: |
-          Enables or disables caching for Docker builds.
+          Enables or disables caching for Docker builds. If enabled, Kaniko will use cache layers to speed up the build process.
         type: boolean
         default: true
       cache_registry:
         description: |
-          The Docker registry used to store cache layers.
+          The Docker registry used to store cache layers. If caching is enabled, this registry will be used to push and pull cache layers.
         type: string
-        default: "josmase/cache"
+        default: ${{ github.repository }}
+      image_push:
+        description: |
+          Controls whether the image should be pushed to the registry. If set to false, the image will only be built and not pushed.
+        type: boolean
+        default: false
+      tag:
+        description: |
+          The tag to be used for the Docker image.
+        default: ""
+        type: string
+
     secrets:
       registry_username:
         description: |
@@ -49,21 +62,58 @@ on:
 jobs:
   build:
     runs-on: ${{ inputs.runner }}
-    permissions:
-      contents: read
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
 
-      - name: Build Docker image
-        uses: ./kaniko.yaml
-        with:
-          registry_url: ${{ inputs.registry_url }}
-          image_name: ${{ inputs.image_name }}
-          dockerfile: ${{ inputs.dockerfile }}
-          context: ${{ inputs.context }}
-          cache: ${{ inputs.cache }}
-          cache_registry: ${{ inputs.cache_registry }}
-          image_push: false
-          registry_username: ${{ secrets.registry_username }}
-          registry_password: ${{ secrets.registry_password }}
+      - name: Set up Kaniko
+        run: |
+          curl -LO https://storage.googleapis.com/kaniko-project/executor:latest
+          chmod +x executor
+          sudo mv executor /usr/local/bin/kaniko
+
+      - name: Build Docker image with Kaniko
+        if: ${{ inputs.image_push == 'false' }}
+        run: |
+          # Run Kaniko to build the Docker image
+          kaniko --context=dir:///${{ inputs.context }} \
+                 --dockerfile=${{ inputs.dockerfile }} \
+                 --cache=${{ inputs.cache }} \
+                 --cache-dir=/cache \
+                 --cache-ttl=24h \
+                 --no-push
+        env:
+          DOCKER_CONFIG: /kaniko/.docker/
+          DOCKER_USERNAME: ${{ secrets.registry_username }}
+          DOCKER_PASSWORD: ${{ secrets.registry_password }}
+
+      - name: Determine Image Tag
+        id: determine_tag
+        if: ${{ inputs.image_push == 'true' }}
+        run: |
+          # Use the input tag if provided; otherwise, extract version from GITHUB_REF
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "tag=${{ inputs.tag }}" >> $GITHUB_ENV
+          else
+            version=$(echo $GITHUB_REF | sed 's/refs\/tags\///')
+            if [ -z "$version" ]; then
+              echo "No version tag found. Exiting."
+              exit 1
+            fi
+            echo "tag=$version" >> $GITHUB_ENV
+          fi
+
+      - name: Push Docker image
+        if: ${{ inputs.image_push == 'true' }}
+        run: |
+          kaniko --context=dir:///${{ inputs.context }} \
+                  --dockerfile=${{ inputs.dockerfile }} \
+                  --destination=${{ inputs.registry_url }}/${{ inputs.image_name }}:${{ env.tag }} \
+                  --cache=${{ inputs.cache }} \
+                  --cache-dir=/cache \
+                  --cache-ttl=24h \
+                  --push
+        env:
+          DOCKER_CONFIG: /kaniko/.docker/
+          DOCKER_USERNAME: ${{ secrets.registry_username }}
+          DOCKER_PASSWORD: ${{ secrets.registry_password }}

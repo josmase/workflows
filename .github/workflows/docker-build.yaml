@@ -59,33 +59,19 @@ on:
           The password for authentication with the Docker registry.
         required: true
 
+env:
+  KANIKO_CACHE_ARGS: "--cache=true --cache-copy-layers=true --cache-ttl=24h"
 jobs:
   build:
     runs-on: ${{ inputs.runner }}
+    container:
+      image: gcr.io/kaniko-project/executor:v1.20.0-debug
+    permissions:
+      contents: read
+
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
-
-      - name: Set up Kaniko
-        run: |
-          curl -LO https://storage.googleapis.com/kaniko-project/executor:latest
-          chmod +x executor
-          sudo mv executor /usr/local/bin/kaniko
-
-      - name: Build Docker image with Kaniko
-        if: ${{ inputs.image_push == 'false' }}
-        run: |
-          # Run Kaniko to build the Docker image
-          kaniko --context=dir:///${{ inputs.context }} \
-                 --dockerfile=${{ inputs.dockerfile }} \
-                 --cache=${{ inputs.cache }} \
-                 --cache-dir=/cache \
-                 --cache-ttl=24h \
-                 --no-push
-        env:
-          DOCKER_CONFIG: /kaniko/.docker/
-          DOCKER_USERNAME: ${{ secrets.registry_username }}
-          DOCKER_PASSWORD: ${{ secrets.registry_password }}
 
       - name: Determine Image Tag
         id: determine_tag
@@ -97,23 +83,32 @@ jobs:
           else
             version=$(echo $GITHUB_REF | sed 's/refs\/tags\///')
             if [ -z "$version" ]; then
-              echo "No version tag found. Exiting."
-              exit 1
+              echo "No version tag found. Using 'latest'."
+              version=latest
             fi
             echo "tag=$version" >> $GITHUB_ENV
           fi
 
-      - name: Push Docker image
-        if: ${{ inputs.image_push == 'true' }}
+      - name: Set up Docker config
         run: |
-          kaniko --context=dir:///${{ inputs.context }} \
-                  --dockerfile=${{ inputs.dockerfile }} \
-                  --destination=${{ inputs.registry_url }}/${{ inputs.image_name }}:${{ env.tag }} \
-                  --cache=${{ inputs.cache }} \
-                  --cache-dir=/cache \
-                  --cache-ttl=24h \
-                  --push
-        env:
-          DOCKER_CONFIG: /kaniko/.docker/
-          DOCKER_USERNAME: ${{ secrets.registry_username }}
-          DOCKER_PASSWORD: ${{ secrets.registry_password }}
+          # Create Docker config directory if it doesn't exist
+          mkdir -p /kaniko/.docker
+
+          # Write Docker config file with authentication details
+          cat <<EOF > /kaniko/.docker/config.json
+          {
+            "auths": {
+              "${{ inputs.registry_url }}": {
+                "username": "${{ secrets.registry_username }}",
+                "password": "${{ secrets.registry_password }}"
+              }
+            }
+          }
+          EOF
+
+      - name: Build Image
+        run: |
+          /kaniko/executor --dockerfile="${{ inputs.dockerfile }}" \
+            --context="${{ inputs.context }}"  \
+            --destination="${{ inputs.registry_url }}/$${{inputs.image_name}}:$${{ env.tag }}" \
+            ${{ env.KANIKO_CACHE_ARGS }} \

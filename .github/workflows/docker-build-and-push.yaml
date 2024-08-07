@@ -62,6 +62,5 @@ jobs:
           cache_registry: ${{ inputs.cache_registry }}
           image_push: true
           tag: ${{ env.version }}
-        secrets:
           registry_username: ${{ secrets.registry_username }}
           registry_password: ${{ secrets.registry_password }}

@@ -65,6 +65,5 @@ jobs:
           cache: ${{ inputs.cache }}
           cache_registry: ${{ inputs.cache_registry }}
           image_push: false
-        secrets:
           registry_username: ${{ secrets.registry_username }}
           registry_password: ${{ secrets.registry_password }}

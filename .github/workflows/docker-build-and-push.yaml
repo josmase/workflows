@@ -52,7 +52,7 @@ jobs:
           echo "version=$version" >> $GITHUB_ENV
 
       - name: Build Docker image
-        uses: josmase/workflows/.github/workflows/kaniko.yaml@main
+        uses: ./kaniko.yaml
         with:
           registry_url: ${{ inputs.registry_url }}
           image_name: ${{ inputs.image_name }}

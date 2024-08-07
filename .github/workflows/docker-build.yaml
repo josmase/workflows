@@ -15,6 +15,12 @@ on:
       context:
         type: string
         default: .
+      cache:
+        type: boolean
+        default: false
+      cache_registry:
+        type: string
+        default: ""
     secrets:
       registry_username:
         required: true
@@ -30,17 +36,13 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v4
 
-      - name: Log in to ${{ inputs.registry_url }}
-        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567
+      - name: Build
+        id: build
+        uses: aevea/action-kaniko@master
         with:
-          registry: ${{ inputs.registry_url }}
-          username: ${{ secrets.registry_username }}
-          password: ${{ secrets.registry_password }}
-
-      - name: Build and push Docker image
-        id: push
-        uses: docker/build-push-action@2dbe91db48e489c125002fbd97678eaf1e0e563e
-        with:
-          context: ${{ inputs.context }}
-          file: ${{ inputs.dockerfile }}
-          push: false
+          image: ${{ github.event.repository.name }}
+          build_file: ${{ inputs.dockerfile }}
+          path: ${{ inputs.context }}
+          cache: ${{ inputs.cache }}
+          cache_registry: ${{ inputs.cache_registry }}
+          extra_args: "--no-push"

@@ -1,0 +1,100 @@
+name: Kaniko Build
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: |
+          The name of the runner to use.
+        required: true
+        type: string
+      registry_url:
+        description: |
+          The URL of the Docker registry where the image will be pushed.
+        required: true
+        type: string
+      image_name:
+        description: |
+          The name of the Docker image to be built and pushed. This typically includes the repository name.
+        required: true
+        type: string
+      dockerfile:
+        description: |
+          The path to the Dockerfile used for building the Docker image.
+        type: string
+        default: "./Dockerfile"
+      context:
+        description: |
+          The build context directory for the Docker image. This directory is used to provide files needed for the build.
+        type: string
+        default: "."
+      cache:
+        description: |
+          Enables or disables caching for Docker builds. If enabled, Kaniko will use cache layers to speed up the build process.
+        type: boolean
+        default: false
+      cache_registry:
+        description: |
+          The Docker registry used to store cache layers. If caching is enabled, this registry will be used to push and pull cache layers.
+        type: string
+        default: ""
+      image_push:
+        description: |
+          Controls whether the image should be pushed to the registry. If set to false, the image will only be built and not pushed.
+        type: boolean
+        default: true
+      tag:
+        description: |
+          The tag to be used for the Docker image.
+        required: true
+        type: string
+
+    secrets:
+      registry_username:
+        description: |
+          The username for authentication with the Docker registry.
+        required: true
+      registry_password:
+        description: |
+          The password for authentication with the Docker registry.
+        required: true
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - name: Set up Kaniko
+        run: |
+          curl -LO https://storage.googleapis.com/kaniko-project/executor:latest
+          chmod +x executor
+          sudo mv executor /usr/local/bin/kaniko
+
+      - name: Build Docker image with Kaniko
+        if: ${{ inputs.image_push == 'false' }}
+        run: |
+          # Run Kaniko to build the Docker image
+          kaniko --context=dir:///${{ inputs.context }} \
+                 --dockerfile=${{ inputs.dockerfile }} \
+                 --cache=${{ inputs.cache }} \
+                 --cache-dir=/cache \
+                 --cache-ttl=24h \
+                 --no-push
+        env:
+          DOCKER_CONFIG: /kaniko/.docker/
+          DOCKER_USERNAME: ${{ secrets.registry_username }}
+          DOCKER_PASSWORD: ${{ secrets.registry_password }}
+
+      - name: Push Docker image
+        if: ${{ inputs.image_push == 'true' }}
+        run: |
+          kaniko --context=dir:///${{ inputs.context }} \
+                 --dockerfile=${{ inputs.dockerfile }} \
+                 --destination=${{ inputs.registry_url }}/${{ inputs.image_name }}:${{ inputs.tag }} \
+                 --cache=${{ inputs.cache }} \
+                 --cache-dir=/cache \
+                 --cache-ttl=24h \
+                 --push
+        env:
+          DOCKER_CONFIG: /kaniko/.docker/
+          DOCKER_USERNAME: ${{ secrets.registry_username }}
+          DOCKER_PASSWORD: ${{ secrets.registry_password }}

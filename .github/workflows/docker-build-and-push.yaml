@@ -51,17 +51,17 @@ jobs:
           fi
           echo "version=$version" >> $GITHUB_ENV
 
-      - name: Build and push
-        id: push
-        uses: aevea/action-kaniko@master
+      - name: Build Docker image
+        uses: ./.github/workflows/kaniko.yml
         with:
-          registry: ${{ inputs.registry_url }}
-          image: ${{ inputs.image_name }}
-          tag: ${{ env.version }}
-          tag_with_latest: true
-          build_file: ${{ inputs.dockerfile }}
-          path: ${{ inputs.context }}
-          username: ${{ secrets.registry_username }}
-          password: ${{ secrets.registry_password }}
+          registry_url: ${{ inputs.registry_url }}
+          image_name: ${{ inputs.image_name }}
+          dockerfile: ${{ inputs.dockerfile }}
+          context: ${{ inputs.context }}
           cache: ${{ inputs.cache }}
           cache_registry: ${{ inputs.cache_registry }}
+          image_push: true
+          tag: ${{ env.version }}
+        secrets:
+          registry_username: ${{ secrets.registry_username }}
+          registry_password: ${{ secrets.registry_password }}

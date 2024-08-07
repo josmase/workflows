@@ -4,27 +4,46 @@ on:
   workflow_call:
     inputs:
       runner:
+        description: |
+          The name of the runner to use for the workflow.
         required: true
         type: string
       registry_url:
+        description: |
+          The URL of the Docker registry where the image will be pushed.
         required: true
         type: string
+      image_name:
+        type: string
+        default: ${{ github.repository }}
       dockerfile:
+        description: |
+          The path to the Dockerfile used for building the Docker image.
         type: string
-        default: ./Dockerfile
+        default: "./Dockerfile"
       context:
+        description: |
+          The build context directory for the Docker image.
         type: string
-        default: .
+        default: "."
       cache:
+        description: |
+          Enables or disables caching for Docker builds.
         type: boolean
-        default: false
+        default: true
       cache_registry:
+        description: |
+          The Docker registry used to store cache layers.
         type: string
-        default: ""
+        default: "josmase/cache"
     secrets:
       registry_username:
+        description: |
+          The username for authentication with the Docker registry.
         required: true
       registry_password:
+        description: |
+          The password for authentication with the Docker registry.
         required: true
 
 jobs:
@@ -36,13 +55,16 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v4
 
-      - name: Build
-        id: build
-        uses: aevea/action-kaniko@master
+      - name: Build Docker image
+        uses: ./.github/workflows/kaniko.yml
         with:
-          image: ${{ github.event.repository.name }}
-          build_file: ${{ inputs.dockerfile }}
-          path: ${{ inputs.context }}
+          registry_url: ${{ inputs.registry_url }}
+          image_name: ${{ inputs.image_name }}
+          dockerfile: ${{ inputs.dockerfile }}
+          context: ${{ inputs.context }}
           cache: ${{ inputs.cache }}
           cache_registry: ${{ inputs.cache_registry }}
-          extra_args: "--no-push"
+          image_push: false
+        secrets:
+          registry_username: ${{ secrets.registry_username }}
+          registry_password: ${{ secrets.registry_password }}

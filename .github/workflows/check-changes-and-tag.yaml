@@ -82,8 +82,9 @@ jobs:
             echo "$changes" > changes.txt
           fi
 
-      - name: Bump version, update changelog, and commit
+      - name: Determine new version
         if: env.changes_detected == 'true'
+        id: determine-version
         run: |
           if [ "${{ env.no_tags }}" == "true" ]; then
             new_version="v0.0.1"  # Start with v0.0.1 if no tags exist
@@ -98,8 +99,20 @@ jobs:
             patch=$((patch + 1))
             new_version="v${major}.${minor}.${patch}"
           fi
+          echo "new_version=$new_version" >> $GITHUB_ENV
+
+      - name: Create and switch to a new branch
+        if: env.changes_detected == 'true'
+        run: |
+          branch_name="release-${{ env.new_version }}"
+          git checkout -b $branch_name
+          echo "branch_name=$branch_name" >> $GITHUB_ENV
+
+      - name: Bump version, update changelog, and commit
+        if: env.changes_detected == 'true'
+        run: |
           # Update CHANGELOG.md
-          echo "## $new_version" >> CHANGELOG.md
+          echo "## ${{ env.new_version }}" >> CHANGELOG.md
           echo "" >> CHANGELOG.md
           # Append changes from the file
           while IFS= read -r line; do
@@ -110,6 +123,42 @@ jobs:
           cat CHANGELOG.md
           # Commit the version bump and changelog
           git add CHANGELOG.md
-          git commit --allow-empty -m "Bump version to $new_version"
-          git tag $new_version
-          git push origin main --tags
+          git commit --allow-empty -m "Bump version to ${{ env.new_version }}"
+          git tag ${{ env.new_version }}
+
+      - name: Push changes to the new branch
+        if: env.changes_detected == 'true'
+        run: |
+          git push origin ${{ env.branch_name }} --tags
+
+      - name: Create Pull Request
+        if: env.changes_detected == 'true'
+        id: create-pr
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.token }}
+          branch: ${{ env.branch_name }}
+          base: main
+          title: "Release ${{ env.new_version }}"
+          body: "This pull request contains the changes for release ${{ env.new_version }}."
+
+      - name: Auto-merge PR when checks pass
+        if: env.changes_detected == 'true'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.token }}
+          script: |
+            const pr = await github.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              head: `${context.repo.owner}:${{ env.branch_name }}`
+            }).then(pulls => pulls.data[0]);
+            if (pr) {
+              await github.pulls.merge({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                merge_method: 'merge'
+              });
+            }

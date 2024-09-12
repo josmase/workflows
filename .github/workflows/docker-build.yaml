@@ -76,6 +76,7 @@ jobs:
         run: |
           mkdir -p /workspace
           cp -R . /workspace/
+          ls -la /workspace
 
       - name: Determine Image Tag
         id: determine_tag

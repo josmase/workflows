@@ -23,21 +23,11 @@ on:
           The path to the Dockerfile used for building the Docker image.
         type: string
         default: "./Dockerfile"
-      context:
-        description: |
-          The build context directory for the Docker image. This directory is used to provide files needed for the build.
-        type: string
-        default: "."
       cache:
         description: |
           Enables or disables caching for Docker builds. If enabled, Kaniko will use cache layers to speed up the build process.
         type: boolean
         default: true
-      cache_registry:
-        description: |
-          The Docker registry used to store cache layers. If caching is enabled, this registry will be used to push and pull cache layers.
-        type: string
-        default: ${{ github.repository }}
       image_push:
         description: |
           Controls whether the image should be pushed to the registry. If set to false, the image will only be built and not pushed.
@@ -60,7 +50,7 @@ on:
         required: true
 
 env:
-  KANIKO_CACHE_ARGS: "--cache=true --cache-copy-layers=true --cache-ttl=24h --cache-repo=${{ inputs.cache_registry }}"
+  KANIKO_CACHE_ARGS: "--cache=true --cache-copy-layers=true --cache-ttl=24h --cache-repo=${{ inputs.registry_url }}/${{ github.repository }}"
 
 jobs:
   determine_image_tag:

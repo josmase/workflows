@@ -121,7 +121,20 @@ jobs:
 
       - name: Build Image
         run: |
-          /kaniko/executor --dockerfile="/workspace/${{ inputs.dockerfile }}" \
-            --context="/workspace/${{ inputs.context }}"  \
-            --destination="${{ inputs.registry_url }}/$${{inputs.image_name}}:$${{ env.tag }}" \
-            ${{ env.KANIKO_CACHE_ARGS }}
+          DOCKERFILE="/workspace/${{ inputs.dockerfile }}"
+          CONTEXT="/workspace/${{ inputs.context }}"
+          DESTINATION="${{ inputs.registry_url }}/$${{inputs.image_name}}:$${{ env.tag }}"
+          CACHE_ARGS="${{ env.KANIKO_CACHE_ARGS }}"
+
+          echo "Dockerfile: $DOCKERFILE"
+          echo "Context: $CONTEXT"
+          echo "Destination: $DESTINATION"
+          echo "Cache Args: $CACHE_ARGS"
+
+          ls -la /workspace
+          ls -la "$CONTEXT"
+
+          /kaniko/executor --dockerfile="$DOCKERFILE" \
+            --context="$CONTEXT" \
+            --destination="$DESTINATION" \
+            $CACHE_ARGS

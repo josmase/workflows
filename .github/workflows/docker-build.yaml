@@ -91,7 +91,7 @@ jobs:
           fi
 
           if [ "${{ inputs.cache }}" = "true" ]; then
-            CACHE_ARGS="${{ env.KANIKO_CACHE_ARGS }}
+            CACHE_ARGS="${{ env.KANIKO_CACHE_ARGS }}"
           else
             CACHE_ARGS=""
           fi

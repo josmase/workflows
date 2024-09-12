@@ -124,9 +124,6 @@ jobs:
           echo "Destination: $DESTINATION"
           echo "Cache Args: $CACHE_ARGS"
 
-          ls -la /workspace
-          ls -la "$CONTEXT"
-
           /kaniko/executor --dockerfile="$DOCKERFILE" \
             --context="$CONTEXT" \
             --destination="$DESTINATION" \

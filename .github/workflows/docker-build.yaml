@@ -63,7 +63,7 @@ env:
   KANIKO_CACHE_ARGS: "--cache=true --cache-copy-layers=true --cache-ttl=24h"
 
 jobs:
-  checkout:
+  determine_image_tag:
     runs-on: ${{ inputs.runner }}
     steps:
       - name: Check out the repo
@@ -88,7 +88,7 @@ jobs:
       image_tag: ${{ env.tag }}
 
   build:
-    needs: checkout
+    needs: determine_image_tag
     runs-on: ${{ inputs.runner }}
     container:
       image: gcr.io/kaniko-project/executor:v1.20.0-debug
@@ -112,19 +112,33 @@ jobs:
           }
           EOF
 
-      - name: Build Image
-        run: |
-          DOCKERFILE="${{ inputs.dockerfile }}"
-          CONTEXT="${{ github.repositoryUrl }}#${{ github.head_ref }}"
-          DESTINATION="${{ inputs.registry_url }}/${{inputs.image_name}}:${{ needs.checkout.outputs.image_tag }}"
-          CACHE_ARGS="${{ env.KANIKO_CACHE_ARGS }}"
+          - name: Build Image
+          run: |
+            DOCKERFILE="${{ inputs.dockerfile }}"
+            CONTEXT="${{ github.repositoryUrl }}#${{ github.head_ref }}"
+            
+            # Check if the image name and tag are set
+            if [ -n "${{ inputs.image_name }}" ] && [ -n "${{ needs.checkout.outputs.image_tag }}" ]; then
+              DESTINATION="${{ inputs.registry_url }}/${{ inputs.image_name }}:${{ needs.checkout.outputs.image_tag }}"
+              echo "Destination: $DESTINATION"
+              DEST_ARGS="--destination=$DESTINATION"
+            else
+              if [ -z "${{ inputs.image_name }}" ]; then
+                echo "Image name is not provided."
+              fi
+              if [ -z "${{ needs.checkout.outputs.image_tag }}" ]; then
+                echo "No tag found. Image will not be pushed."
+              fi
+              DEST_ARGS="--no-push"
+            fi
+            
+            CACHE_ARGS="${{ env.KANIKO_CACHE_ARGS }}"
 
-          echo "Dockerfile: $DOCKERFILE"
-          echo "Context: $CONTEXT"
-          echo "Destination: $DESTINATION"
-          echo "Cache Args: $CACHE_ARGS"
+            echo "Dockerfile: $DOCKERFILE"
+            echo "Context: $CONTEXT"
+            echo "Cache Args: $CACHE_ARGS"
 
-          /kaniko/executor --dockerfile="$DOCKERFILE" \
-            --context="$CONTEXT" \
-            --destination="$DESTINATION" \
-            $CACHE_ARGS
+            /kaniko/executor --dockerfile="$DOCKERFILE" \
+              --context="$CONTEXT" \
+              $DEST_ARGS \
+              $CACHE_ARGS

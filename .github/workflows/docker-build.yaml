@@ -69,16 +69,6 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v4
 
-      - name: Cache checkout files
-        id: cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ./
-          key: ${{ runner.os }}-checkout-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-checkout-
-
       - name: Determine Image Tag
         id: determine_tag
         if: ${{ inputs.image_push == 'true' }}
@@ -102,18 +92,9 @@ jobs:
     runs-on: ${{ inputs.runner }}
     container:
       image: gcr.io/kaniko-project/executor:v1.20.0-debug
-      volumes:
-        - my_workspace:/workspace
+    permissions:
+      contents: read
     steps:
-      - name: Restore checkout files
-        uses: actions/cache@v3
-        with:
-          path: |
-            ./
-          key: ${{ needs.checkout.outputs.cache-key }}
-          restore-keys: |
-            ${{ runner.os }}-checkout-
-
       - name: Set up Docker config
         run: |
           # Create Docker config directory if it doesn't exist
@@ -134,7 +115,7 @@ jobs:
       - name: Build Image
         run: |
           DOCKERFILE="/workspace/${{ inputs.dockerfile }}"
-          CONTEXT="/workspace/${{ inputs.context }}"
+          CONTEXT="${{ github.repositoryUrl }}/${{ inputs.context }}#${{ github.ref }}#${{ github.sha }}"
           DESTINATION="${{ inputs.registry_url }}/${{inputs.image_name}}:${{ needs.checkout.outputs.image_tag }}"
           CACHE_ARGS="${{ env.KANIKO_CACHE_ARGS }}"
 

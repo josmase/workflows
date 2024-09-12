@@ -62,7 +62,7 @@ on:
 env:
   KANIKO_CACHE_ARGS: "--cache=true --cache-copy-layers=true --cache-ttl=24h"
 jobs:
-  checkout:
+  determine_tag:
     runs-on: ${{ inputs.runner }}
     steps:
       - name: Check out the repo
@@ -85,7 +85,7 @@ jobs:
           fi
 
   build:
-    needs: checkout
+    needs: determine_tag
     runs-on: ${{ inputs.runner }}
     container:
       image: gcr.io/kaniko-project/executor:v1.20.0-debug
@@ -113,6 +113,6 @@ jobs:
       - name: Build Image
         run: |
           /kaniko/executor --dockerfile="${{ inputs.dockerfile }}" \
-            --context="${{ inputs.context }}"  \
+            --context="${{ github.repositoryUrl }}/${{ inputs.context }}/#${{ github.ref }}#${{ github.sha }}"  \
             --destination="${{ inputs.registry_url }}/$${{inputs.image_name}}:$${{ env.tag }}" \
             ${{ env.KANIKO_CACHE_ARGS }}

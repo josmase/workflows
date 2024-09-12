@@ -16,7 +16,7 @@ on:
       image_name:
         description: |
           The name of the Docker image to be built and pushed. This typically includes the repository name.
-        required: false #Should be required
+        required: false
         type: string
       dockerfile:
         description: |
@@ -61,22 +61,23 @@ on:
 
 env:
   KANIKO_CACHE_ARGS: "--cache=true --cache-copy-layers=true --cache-ttl=24h"
+
 jobs:
   checkout:
     runs-on: ${{ inputs.runner }}
-    container:
-      image: registry-proxy.local.hejsan.xyz/library/alpine:3.20.3
-      volumes:
-        - my_workspace:/workspace
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
 
-      - name: Move files to shared volume
-        run: |
-          mkdir -p /workspace
-          cp -R . /workspace/
-          ls -la /workspace
+      - name: Cache checkout files
+        id: cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ./
+          key: ${{ runner.os }}-checkout-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-checkout-
 
       - name: Determine Image Tag
         id: determine_tag
@@ -93,6 +94,8 @@ jobs:
             fi
             echo "tag=$version" >> $GITHUB_ENV
           fi
+    outputs:
+      image_tag: ${{ env.tag }}
 
   build:
     needs: checkout
@@ -101,8 +104,16 @@ jobs:
       image: gcr.io/kaniko-project/executor:v1.20.0-debug
       volumes:
         - my_workspace:/workspace
-
     steps:
+      - name: Restore checkout files
+        uses: actions/cache@v3
+        with:
+          path: |
+            ./
+          key: ${{ needs.checkout.outputs.cache-key }}
+          restore-keys: |
+            ${{ runner.os }}-checkout-
+
       - name: Set up Docker config
         run: |
           # Create Docker config directory if it doesn't exist
@@ -124,7 +135,7 @@ jobs:
         run: |
           DOCKERFILE="/workspace/${{ inputs.dockerfile }}"
           CONTEXT="/workspace/${{ inputs.context }}"
-          DESTINATION="${{ inputs.registry_url }}/$${{inputs.image_name}}:$${{ env.tag }}"
+          DESTINATION="${{ inputs.registry_url }}/${{inputs.image_name}}:${{ needs.checkout.outputs.image_tag }}"
           CACHE_ARGS="${{ env.KANIKO_CACHE_ARGS }}"
 
           echo "Dockerfile: $DOCKERFILE"

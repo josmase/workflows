@@ -114,7 +114,7 @@ jobs:
 
       - name: Build Image
         run: |
-          DOCKERFILE="/workspace/${{ inputs.dockerfile }}"
+          DOCKERFILE="${{ inputs.dockerfile }}"
           CONTEXT="${{ github.repositoryUrl }}/${{ inputs.context }}#${{ github.ref }}#${{ github.sha }}"
           DESTINATION="${{ inputs.registry_url }}/${{inputs.image_name}}:${{ needs.checkout.outputs.image_tag }}"
           CACHE_ARGS="${{ env.KANIKO_CACHE_ARGS }}"

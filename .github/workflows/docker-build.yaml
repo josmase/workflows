@@ -16,7 +16,7 @@ on:
       name:
         description: |
           The name of the Docker image to be built and pushed. This typically includes the repository name.
-        required: false
+        required: true
         type: string
       dockerfile:
         description: |

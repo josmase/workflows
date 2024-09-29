@@ -144,7 +144,7 @@ jobs:
 
       - name: Auto-merge PR when checks pass
         if: env.changes_detected == 'true'
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.token }}
           script: |

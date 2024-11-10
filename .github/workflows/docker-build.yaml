@@ -50,7 +50,7 @@ on:
         required: true
 
 env:
-  KANIKO_CACHE_ARGS: "--cache=true --cache-copy-layers=true --cache-ttl=24h --cache-repo=${{ inputs.registry_url }}/${{ inputs.name }}-cache"
+  KANIKO_CACHE_ARGS: "--cache=true --cache-copy-layers=true --cache-ttl=24h --cache-repo=${{ inputs.registry_url }}/${{ inputs.name }}-cache --compressed-caching=false"
 
 jobs:
   build:

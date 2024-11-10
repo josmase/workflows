@@ -31,34 +31,23 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-      # Step 1: Determine changes since the last tag
-      - name: Check for changes
-        id: check-changes
+      - name: Bump version, update changelog, and commit
+        id: version
         run: |
-          # Fetch all tags and determine if any changes have been made since the last tag
+          # Fetch all tags and check for changes since the last tag
           git fetch --tags
           latest_tag=$(git describe --tags --abbrev=0)
           changes=$(git log $latest_tag..HEAD --oneline -- . ':!*.github/*')
 
           if [ -z "$changes" ]; then
-            echo "No changes detected."
-            echo "changes-detected=false" >> $GITHUB_OUTPUT
+            echo "No changes detected. Skipping version bump."
             exit 0
           fi
-
-          echo "Changes detected."
-          echo "latest-tag=$latest_tag" >> $GITHUB_OUTPUT
           echo "changes-detected=true" >> $GITHUB_OUTPUT
-          echo "changes=$changes" >> $GITHUB_OUTPUT
+          echo "Changes detected."
 
-      - name: Determine new version
-        if: steps.check-changes.outputs.changes-detected == 'true'
-        id: version
-        run: |
-          # Get the latest tag and calculate the new version
-          latest_tag="${{ steps.check-changes.outputs.latest-tag }}"
+          # Determine the new version
           tag_count=$(git tag -l | wc -l)
-
           if [ "$tag_count" -eq 0 ]; then
             echo "No tags found. Starting with 0.0.1"
             new_version="0.0.1"
@@ -72,29 +61,27 @@ jobs:
             new_version="${major}.${minor}.${patch}"
           fi
 
+          echo "New version: $new_version"
           echo "new-version=$new_version" >> $GITHUB_OUTPUT
 
-      - name: Update CHANGELOG.md
-        if: steps.check-changes.outputs.changes-detected == 'true'
-        id: update-changelog
-        run: |
-          new_changelog="## ${{ steps.version.outputs.new-version }}\n\n"            
+          # Update CHANGELOG.md
+          new_changelog="## $new_version\n\n"
           while IFS= read -r line; do
             new_changelog+="* $line\n"
-          done <<< "${{ steps.check-changes.outputs.changes }}"
+          done <<< "$changes"
 
           # Prepend new changelog entry to the existing CHANGELOG.md
           echo -e "$new_changelog\n\n$(cat CHANGELOG.md)" > CHANGELOG.md
 
           # Commit the changelog update
           git add CHANGELOG.md
-          git commit -m "Update changelog for ${{ steps.version.outputs.new-version }}"
+          git commit -m "Update changelog for $new_version"
 
           # Tag the commit with the new version
-          git tag "${{ steps.version.outputs.new-version }}"
+          git tag "$new_version"
 
       - name: Create Pull Request
-        if: steps.check-changes.outputs.changes-detected == 'true'
+        if: steps.version.outputs.changes-detected == 'true'
         id: create-pr
         uses: peter-evans/create-pull-request@v7
         with:

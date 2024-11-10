@@ -6,9 +6,6 @@ on:
       runner:
         required: true
         type: string
-      version:
-        required: true
-        type: string
     secrets:
       token:
         required: true
@@ -33,20 +30,29 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-      - name: Create Git tag based on version string
+      - name: Check commit message for version
+        id: check_version
         run: |
-          # Extract version from the input string (format: "release: x.y.z")
-          version="${{ inputs.version }}"
-          new_version=$(echo $version | awk -F': ' '{print $2}')
+          # Get the latest commit message
+          commit_message=$(git log -1 --pretty=%B)
 
-          # Check if version string is valid (basic check)
-          if [[ ! "$new_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Invalid version format. Expected format is X.Y.Z but got: '$new_version'"
+          echo "Latest commit message: $commit_message"
+
+          # Extract the version from the commit message (format: "release: x.y.z")
+          if [[ "$commit_message" =~ ^release:\ ([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+            new_version="${BASH_REMATCH[1]}"
+            echo "Version extracted: $new_version"
+            echo "version=$new_version" >> $GITHUB_OUTPUT
+          else
+            echo "Commit message does not contain a valid version (release: x.y.z)."
             exit 1
           fi
 
+      - name: Create Git tag based on version string
+        if: steps.check_version.outputs.version != ''
+        run: |
           # Create the git tag
-          git tag "v$new_version"
+          git tag "v${{ steps.check_version.outputs.version }}"
 
           # Push the tag to the repository
-          git push origin "v$new_version"
+          git push origin "v${{ steps.check_version.outputs.version }}"

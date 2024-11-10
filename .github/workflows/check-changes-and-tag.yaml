@@ -78,13 +78,13 @@ jobs:
         if: steps.check-changes.outputs.changes-detected == 'true'
         id: update-changelog
         run: |
-          # Append new version and changes to the changelog
-          echo "## ${{ steps.version.outputs.new-version }}" >> CHANGELOG.md
-          echo "" >> CHANGELOG.md
+          new_changelog="## ${{ steps.version.outputs.new-version }}\n\n"            
           while IFS= read -r line; do
-            echo "* $line" >> CHANGELOG.md
+            new_changelog+="* $line\n"
           done <<< "${{ steps.check-changes.outputs.changes }}"
-          echo "" >> CHANGELOG.md
+
+          # Prepend new changelog entry to the existing CHANGELOG.md
+          echo -e "$new_changelog\n\n$(cat CHANGELOG.md)" > CHANGELOG.md
 
           # Commit the changelog update
           git add CHANGELOG.md

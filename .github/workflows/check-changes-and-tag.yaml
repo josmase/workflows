@@ -31,86 +31,78 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-      - name: Bump version, update changelog, and commit
-        id: bump-version
+      # Step 1: Determine changes since the last tag
+      - name: Check for changes
+        id: check-changes
         run: |
-          # Fetch all tags to check if any exist
-          echo "Fetching all tags..."
+          # Fetch all tags and determine if any changes have been made since the last tag
           git fetch --tags
-          echo "Listing all tags..."
-          git tag -l
+          latest_tag=$(git describe --tags --abbrev=0)
+          changes=$(git log $latest_tag..HEAD --oneline -- . ':!*.github/*')
+
+          if [ -z "$changes" ]; then
+            echo "No changes detected."
+            echo "changes-detected=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Changes detected."
+          echo "latest-tag=$latest_tag" >> $GITHUB_OUTPUT
+          echo "changes-detected=true" >> $GITHUB_OUTPUT
+          echo "changes=$changes" >> $GITHUB_OUTPUT
+
+      - name: Determine new version
+        if: steps.check-changes.outputs.changes-detected == 'true'
+        id: version
+        run: |
+          # Get the latest tag and calculate the new version
+          latest_tag="${{ steps.check-changes.outputs.latest-tag }}"
           tag_count=$(git tag -l | wc -l)
-          echo "Number of tags: $tag_count"
 
           if [ "$tag_count" -eq 0 ]; then
             echo "No tags found. Starting with 0.0.1"
             new_version="0.0.1"
           else
-            # Get the latest tag and commit for the tag
-            latest_tag=$(git describe --tags --abbrev=0)
-            echo "Latest tag: $latest_tag"
-
-            latest_tag_commit=$(git rev-list -n 1 $latest_tag)
-            echo "Latest tag commit: $latest_tag_commit"
-
-            # Check for changes since the latest tag
-            changes=$(git log $latest_tag_commit..HEAD --oneline -- . ':!*.github/*')
-
-            if [ -z "$changes" ]; then
-              echo "No changes since the last tag. Skipping version bump."
-               echo "changes-detected=false" >> $GITHUB_OUTPUT
-              exit 0
-            fi
-            
-            echo "Changes detected:"
-            echo "$changes"
-            echo "changes-detected=true" >> $GITHUB_OUTPUT
-
-            # Determine new version by incrementing the patch version
+            # Extract major, minor, patch, and increment the patch
             IFS='.' read -r -a version_parts <<< "${latest_tag#v}"
             major=${version_parts[0]}
             minor=${version_parts[1]}
             patch=${version_parts[2]}
             patch=$((patch + 1))
             new_version="${major}.${minor}.${patch}"
-            echo "New version: $new_version"
           fi
 
           echo "new-version=$new_version" >> $GITHUB_OUTPUT
 
-          # Update CHANGELOG.md
-          echo "## $new_version" >> CHANGELOG.md
+      - name: Update CHANGELOG.md
+        if: steps.check-changes.outputs.changes-detected == 'true'
+        id: update-changelog
+        run: |
+          # Append new version and changes to the changelog
+          echo "## ${{ steps.version.outputs.new-version }}" >> CHANGELOG.md
           echo "" >> CHANGELOG.md
-
-          # Append changes to CHANGELOG.md
           while IFS= read -r line; do
             echo "* $line" >> CHANGELOG.md
-          done <<< "$changes"
+          done <<< "${{ steps.check-changes.outputs.changes }}"
           echo "" >> CHANGELOG.md
 
-          # Verify CHANGELOG.md content
-          cat CHANGELOG.md
-
-          # Commit the version bump and changelog
+          # Commit the changelog update
           git add CHANGELOG.md
-          git commit --allow-empty -m "Bump version to $new_version"
+          git commit -m "Update changelog for ${{ steps.version.outputs.new-version }}"
 
-          # Set the target commit to the latest commit hash
-          TARGET_COMMIT=$(git rev-parse HEAD)
-
-          # Tag the specific commit
-          git tag "$new_version" "$TARGET_COMMIT"
+          # Tag the commit with the new version
+          git tag "${{ steps.version.outputs.new-version }}"
 
       - name: Create Pull Request
-        if: steps.bump-version.outputs.changes-detected == 'true'
+        if: steps.check-changes.outputs.changes-detected == 'true'
         id: create-pr
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.token }}
-          branch: release-${{ steps.bump-version.outputs.new-version }}
+          branch: release-${{ steps.version.outputs.new-version }}
           base: main
-          title: "Release ${{ steps.bump-version.outputs.new-version }}"
-          body: "This pull request contains the changes for release ${{ steps.bump-version.outputs.new-version }}."
+          title: "Release ${{ steps.version.outputs.new-version }}"
+          body: "This pull request contains the changes for release ${{ steps.version.outputs.new-version }}."
 
       - name: Auto-merge PR when checks pass
         if: steps.create-pr.outputs.pull-request-operation == 'created'

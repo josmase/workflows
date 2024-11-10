@@ -54,14 +54,16 @@ jobs:
 
             # Check for changes since the latest tag
             changes=$(git log $latest_tag_commit..HEAD --oneline -- . ':!*.github/*')
-            echo "Changes detected:"
-            echo "$changes"
 
             if [ -z "$changes" ]; then
               echo "No changes since the last tag. Skipping version bump."
               echo "changes_detected=false" >> $GITHUB_ENV
               exit 0
             fi
+            
+            echo "Changes detected:"
+            echo "$changes"
+            echo "changes_detected=true" >> $GITHUB_ENV
 
             # Determine new version by incrementing the patch version
             IFS='.' read -r -a version_parts <<< "${latest_tag#v}"

@@ -71,7 +71,7 @@ jobs:
           done <<< "$changes"
 
           # Prepend new changelog entry to the existing CHANGELOG.md
-          echo -e "$new_changelog\n\n$(cat CHANGELOG.md)" > CHANGELOG.md
+          echo -e "$new_changelog\n$(cat CHANGELOG.md)" > CHANGELOG.md
 
           # Commit the changelog update
           git add CHANGELOG.md

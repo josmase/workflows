@@ -1,0 +1,52 @@
+name: Create tag
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+    secrets:
+      token:
+        required: true
+
+jobs:
+  automatic-tag:
+    runs-on: ${{ inputs.runner }}
+
+    steps:
+      - name: Ensure Git is installed
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git
+
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.token }}
+
+      - name: Set up Git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      - name: Create Git tag based on version string
+        run: |
+          # Extract version from the input string (format: "release: x.y.z")
+          version="${{ inputs.version }}"
+          new_version=$(echo $version | awk -F': ' '{print $2}')
+
+          # Check if version string is valid (basic check)
+          if [[ ! "$new_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version format. Expected format is X.Y.Z but got: '$new_version'"
+            exit 1
+          fi
+
+          # Create the git tag
+          git tag "v$new_version"
+
+          # Push the tag to the repository
+          git push origin "v$new_version"

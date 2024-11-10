@@ -1,4 +1,4 @@
-name: Check Changes and Tag
+name: Update changelog
 
 on:
   workflow_call:
@@ -11,7 +11,7 @@ on:
         required: true
 
 jobs:
-  check-changes-and-tag:
+  automatic-changelog:
     runs-on: ${{ inputs.runner }}
 
     steps:
@@ -77,9 +77,6 @@ jobs:
           git add CHANGELOG.md
           git commit -m "Update changelog for $new_version"
 
-          # Tag the commit with the new version
-          git tag "$new_version"
-
       - name: Create Pull Request
         if: steps.version.outputs.changes-detected == 'true'
         id: create-pr
@@ -88,7 +85,7 @@ jobs:
           token: ${{ secrets.token }}
           branch: release-${{ steps.version.outputs.new-version }}
           base: main
-          title: "Release ${{ steps.version.outputs.new-version }}"
+          title: "release: ${{ steps.version.outputs.new-version }}"
           body: "This pull request contains the changes for release ${{ steps.version.outputs.new-version }}."
 
       - name: Enable Pull Request Automerge
@@ -96,3 +93,7 @@ jobs:
         run: gh pr merge --merge --auto "${{ steps.create-pr.outputs.pull-request-number }}"
         env:
           GH_TOKEN: ${{ secrets.PAT }}
+
+    outputs:
+      version: ${{ steps.version.outputs.new-version }}
+      pr-number: ${{ steps.create-pr.outputs.pull-request-number }}

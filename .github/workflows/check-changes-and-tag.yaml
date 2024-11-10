@@ -32,6 +32,7 @@ jobs:
           git config user.email "github-actions@github.com"
 
       - name: Bump version, update changelog, and commit
+        id: bump-version
         run: |
           # Fetch all tags to check if any exist
           echo "Fetching all tags..."
@@ -57,13 +58,13 @@ jobs:
 
             if [ -z "$changes" ]; then
               echo "No changes since the last tag. Skipping version bump."
-              echo "changes_detected=false" >> $GITHUB_ENV
+              echo "::set-output name=changes-detected::false"
               exit 0
             fi
             
             echo "Changes detected:"
             echo "$changes"
-            echo "changes_detected=true" >> $GITHUB_ENV
+            echo "::set-output name=changes-detected::true"
 
             # Determine new version by incrementing the patch version
             IFS='.' read -r -a version_parts <<< "${latest_tag#v}"
@@ -75,7 +76,7 @@ jobs:
             echo "New version: $new_version"
           fi
 
-          echo "new_version=$new_version" >> $GITHUB_ENV
+          echo "::set-output name=new-version::$new_version"
 
           # Update CHANGELOG.md
           echo "## $new_version" >> CHANGELOG.md
@@ -101,15 +102,15 @@ jobs:
           git tag "$new_version" "$TARGET_COMMIT"
 
       - name: Create Pull Request
-        if: env.changes_detected == 'true'
+        if: steps.bump-version.outputs.changes-detected == 'true'
         id: create-pr
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.token }}
-          branch: release-${{ env.new_version }}
+          branch: release-${{ steps.bump-version.outputs.new-version }}
           base: main
-          title: "Release ${{ env.new_version }}"
-          body: "This pull request contains the changes for release ${{ env.new_version }}."
+          title: "Release ${{ steps.bump-version.outputs.new-version }}"
+          body: "This pull request contains the changes for release ${{ steps.bump-version.outputs.new-version }}."
 
       - name: Auto-merge PR when checks pass
         if: steps.create-pr.outputs.pull-request-operation == 'created'

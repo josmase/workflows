@@ -58,13 +58,13 @@ jobs:
 
             if [ -z "$changes" ]; then
               echo "No changes since the last tag. Skipping version bump."
-              echo "::set-output name=changes-detected::false"
+               echo "changes-detected=false" >> $GITHUB_OUTPUT
               exit 0
             fi
             
             echo "Changes detected:"
             echo "$changes"
-            echo "::set-output name=changes-detected::true"
+            echo "changes-detected=true" >> $GITHUB_OUTPUT
 
             # Determine new version by incrementing the patch version
             IFS='.' read -r -a version_parts <<< "${latest_tag#v}"
@@ -76,7 +76,7 @@ jobs:
             echo "New version: $new_version"
           fi
 
-          echo "::set-output name=new-version::$new_version"
+          echo "new-version=$new_version" >> $GITHUB_OUTPUT
 
           # Update CHANGELOG.md
           echo "## $new_version" >> CHANGELOG.md

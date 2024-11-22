@@ -35,12 +35,19 @@ jobs:
           echo "Latest commit message: $commit_message"
 
           # Extract the version from the commit message (format: "release: x.y.z")
-          if [[ "$commit_message" =~ ^release:\ ([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-            new_version="${BASH_REMATCH[1]}"
-            echo "Version extracted: $new_version"
-            echo "version=$new_version" >> $GITHUB_OUTPUT
+          if [[ "$commit_message" =~ "release: " ]]; then
+            new_version="${commit_message##*release: }"
+            if [[ "$new_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Version extracted: $new_version"
+              echo "version=$new_version" >> $GITHUB_OUTPUT
+            else
+              echo "Invalid version number format. Expected x.y.z, got $new_version"
+            fi
           else
             echo "Commit message does not contain a valid version (release: x.y.z)."
+          fi
+
+          if [ -z "$new_version" ]; then
             exit 1
           fi
 

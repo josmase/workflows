@@ -2,17 +2,13 @@ name: Create tag
 
 on:
   workflow_call:
-    inputs:
-      runner:
-        required: true
-        type: string
     secrets:
       token:
         required: true
 
 jobs:
   automatic-tag:
-    runs-on: ${{ inputs.runner }}
+    runs-on: ${{ vars.RUNNER }}
 
     steps:
       - name: Ensure Git is installed

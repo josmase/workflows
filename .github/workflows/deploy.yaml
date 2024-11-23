@@ -87,7 +87,7 @@ jobs:
 
       - name: Setup kubeconfig
         run: |
-          echo ${{secrets.kubeconfig}} > ~/.kube/config
+          echo "${{secrets.kubeconfig}}" > ~/.kube/config
           kubectl cluster-info
 
       - name: Verify image version

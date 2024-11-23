@@ -83,7 +83,7 @@ jobs:
           git commit -m "Update image version to ${{inputs.image-version}}"
 
       - name: Push changes to new branch
-        run: git push origin "deploy_${{ inputs.image-name }}_${{ inputs.image-version }}"
+        run: git push origin "deploy_${{ inputs.image-name }}_${{ inputs.image-version }}" --force
 
       - name: Setup kubeconfig
         run: |

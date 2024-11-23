@@ -45,10 +45,22 @@ jobs:
     steps:
       - name: Install required dependencies
         run: |
+          echo "Installing required dependencies for kubectl"
           sudo apt-get update
-          sudo apt-get install -y git
-          sudo snap install kubectl --classic
-          kubectl version --client
+          sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
+
+          echo "Add kubectl gpg key"
+          sudo mkdir -p -m 755 /etc/apt/keyrings
+          curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+          sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+          echo "Add kubectl repo"
+          echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+          sudo chmod 644 /etc/apt/sources.list.d/kubernetes.list
+
+          echo "Install all required dependencies"
+          sudo apt-get update
+          sudo apt-get install -y git kubectl
 
       - name: Checkout other repo
         uses: actions/checkout@v2
@@ -76,6 +88,7 @@ jobs:
       - name: Setup kubeconfig
         run: |
           echo ${{secrets.kubeconfig}} > ~/.kube/config
+          kubectl cluster-info
 
       - name: Verify image version
         run: |

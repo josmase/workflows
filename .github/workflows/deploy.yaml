@@ -43,11 +43,11 @@ jobs:
   update-image-version:
     runs-on: ${{ var.RUNNER }}
     steps:
-      - name: Ensure Git is installed
+      - name: Ensure required dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git
-              required: true
+          sudo apt-get install -y git kubectl
+
       - name: Checkout other repo
         uses: actions/checkout@v2
         with:
@@ -70,6 +70,10 @@ jobs:
 
       - name: Push changes to new branch
         run: git push origin "deploy_${{ inputs.image-name }}_${{ inputs.image-version }}"
+
+      - name: Setup kubeconfig
+        run: |
+          echo ${{secrets.kubeconfig}} > ~/.kube/config
 
       - name: Verify image version
         run: |

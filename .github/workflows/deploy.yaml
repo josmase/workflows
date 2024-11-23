@@ -41,7 +41,7 @@ on:
 
 jobs:
   update-image-version:
-    runs-on: ${{ var.RUNNER }}
+    runs-on: ${{ vars.RUNNER }}
     steps:
       - name: Ensure required dependencies
         run: |

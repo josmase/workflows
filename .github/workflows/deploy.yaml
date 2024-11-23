@@ -80,7 +80,7 @@ jobs:
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
           git add ${{inputs.file-path}}
-          git commit -m "Update image version to ${{inputs.image-version}}"
+          git commit -m "Update image version of ${{inputs.kind}}/${{inputs.name}} to ${{inputs.image-version}}"
 
       - name: Push changes to new branch
         run: git push origin "deploy_${{ inputs.image-name }}_${{ inputs.image-version }}" --force
@@ -109,7 +109,7 @@ jobs:
         run: |
           while true; do
             echo "Waiting for the resource to be available..."
-            if kubectl wait --for=condition=available --timeout=2s ${{ inputs.image-name }}:${{ inputs.image-version }} -n ${{inputs.namespace}}; then
+            if kubectl wait --for=condition=available --timeout=2s ${{inputs.kind}}/${{inputs.name}} -n ${{inputs.namespace}}; then
               echo "Resource is available!"
               break
             else

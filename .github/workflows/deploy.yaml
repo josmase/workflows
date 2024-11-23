@@ -124,15 +124,21 @@ jobs:
 
       - name: Verify image version
         run: |
-          while true; do
-          IMAGE_VERSION_CHECK=$(kubectl get ${{inputs.kind}}/${{inputs.name}} -n ${{inputs.namespace}} -o jsonpath='{.spec.template.spec.containers[0].image}')
-          if [[ $IMAGE_VERSION_CHECK =~ ${{ inputs.image-name }}:${{ inputs.image-version }}$ ]]; then
-              echo "Image version is updated to ${{ inputs.image-name }}:${{ inputs.image-version }}"
-              break
-          else
-              echo "Image version is not yet updated, current version is ${IMAGE_VERSION_CHECK}, retrying..."
-              sleep 30
+          JSON_PATH="{.spec.template.spec.containers[0].image}" 
+          if [[ ${{inputs.kind}} == "cronjob" ]]; then
+            JSON_PATH="{.spec.jobTemplate.spec.template.spec.containers[0].image}"
           fi
+
+
+          while true; do
+            IMAGE_VERSION_CHECK=$(kubectl get ${{inputs.kind}}/${{inputs.name}} -n ${{inputs.namespace}} -o jsonpath='${JSON_PATH}')
+            if [[ $IMAGE_VERSION_CHECK =~ ${{ inputs.image-name }}:${{ inputs.image-version }} ]]; then
+                echo "Image version is updated to ${{ inputs.image-name }}:${{ inputs.image-version }}"
+                break
+            else
+                echo "Image version is not yet updated, current version is ${IMAGE_VERSION_CHECK}, retrying..."
+                sleep 30
+            fi
           done
         timeout-minutes: 5
 

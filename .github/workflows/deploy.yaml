@@ -87,6 +87,7 @@ jobs:
 
       - name: Setup kubeconfig
         run: |
+          mkdir -p ~/.kube
           echo "${{secrets.kubeconfig}}" > ~/.kube/config
           kubectl cluster-info
 

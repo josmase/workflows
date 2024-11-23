@@ -79,7 +79,7 @@ jobs:
           # Commit the changes
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
-          git add ${inputs.file-path}
+          git add ${{inputs.file-path}}
           git commit -m "Update image version to ${{inputs.image-version}}"
 
       - name: Push changes to new branch

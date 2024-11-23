@@ -42,12 +42,66 @@ on:
 jobs:
   update-image-version:
     runs-on: ${{ vars.RUNNER }}
+    outputs:
+      changes-detected: ${{ steps.version.outputs.changes-detected }}
+    steps:
+      - name: Install required dependencies
+        run: |
+          echo "Installing git"
+          sudo apt-get update
+          sudo apt-get install -y git gh
+
+      - name: Checkout infrastructures repo
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ inputs.repository }}
+          token: ${{ secrets.github-token }}
+
+      - name: Update image version
+        id: version
+        run: |
+          # Update the image version in the YAML file
+          sed -i "s|${{ inputs.image-name }}:v[0-9.]*|${{ inputs.image-name }}:${{ inputs.image-version}}|g" ${{inputs.file-path}}
+
+          if [[ `git status --porcelain` ]]; then
+            echo "Changes detected"  
+            git config --global user.name "github-actions"
+            git config --global user.email "github-actions@github.com"
+            git add ${{inputs.file-path}}
+            git commit -m "Update image version of ${{inputs.kind}}/${{inputs.name}} to ${{inputs.image-version}}"
+            echo "changes-detected=true" >> $GITHUB_OUTPUT
+          else
+            echo "No changes detected"
+            echo "changes-detected=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.version.outputs.changes-detected == 'true'
+        id: create-pr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.github-token }}
+          branch: deploy-${{inputs.kind}}_${{inputs.name}}_${{inputs.image-version}}
+          base: main
+          title: "Deploy: ${{inputs.kind}}/${{inputs.name}} with version ${{inputs.image-version}}"
+          body: "This pull request contains the changes for ${{inputs.kind}}/${{inputs.name}} with version ${{inputs.image-version}}."
+
+      - name: Enable Pull Request Automerge
+        if: steps.create-pr.outputs.pull-request-url != ''
+        run: gh pr merge --squash --auto "${{ steps.create-pr.outputs.pull-request-url }}"
+        env:
+          GH_TOKEN: ${{ secrets.github-token }}
+
+  verify-deployment:
+    runs-on: ${{ vars.RUNNER }}
+    if: ${{ needs.update-image-version.outputs.changes-detected == 'true' }}
+    needs: update-image-version
     steps:
       - name: Install required dependencies
         run: |
           echo "Installing required dependencies for kubectl"
           sudo apt-get update
-          sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
+          sudo apt-get install -y apt-transport-https ca-certificates curl gnupg git
 
           echo "Add kubectl gpg key"
           sudo mkdir -p -m 755 /etc/apt/keyrings
@@ -58,32 +112,9 @@ jobs:
           echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
           sudo chmod 644 /etc/apt/sources.list.d/kubernetes.list
 
-          echo "Install all required dependencies"
+          echo "Install kubectl"
           sudo apt-get update
-          sudo apt-get install -y git kubectl
-
-      - name: Checkout other repo
-        uses: actions/checkout@v2
-        with:
-          repository: ${{ inputs.repository }}
-          token: ${{ secrets.github-token }}
-
-      - name: Create new branch
-        run: git checkout -b "deploy_${{ inputs.image-name }}_${{ inputs.image-version }}"
-
-      - name: Update image version
-        run: |
-          # Update the image version in the YAML file
-          sed -i "s|${{ inputs.image-name }}:v[0-9.]*|${{ inputs.image-name }}:${{ inputs.image-version}}|g" ${{inputs.file-path}}
-
-          # Commit the changes
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
-          git add ${{inputs.file-path}}
-          git commit -m "Update image version of ${{inputs.kind}}/${{inputs.name}} to ${{inputs.image-version}}"
-
-      - name: Push changes to new branch
-        run: git push origin "deploy_${{ inputs.image-name }}_${{ inputs.image-version }}" --force
+          sudo apt-get install -y kubectl
 
       - name: Setup kubeconfig
         run: |

@@ -1,0 +1,100 @@
+name: Update Image Version and Wait for Deployment
+
+on:
+  workflow_call:
+    inputs:
+      image-version:
+        description: The new image version
+        required: true
+        type: string
+      image-name:
+        description: The name of the image to update
+        required: true
+        type: string
+      file-path:
+        description: The path to the file to update
+        required: true
+        type: string
+      repository:
+        description: The repository to update
+        required: true
+        type: string
+      namespace:
+        description: The namespace where the resource is running
+        required: true
+        type: string
+      kind:
+        description: The kind of Kubernetes resource (e.g. deployment, statefulset)
+        required: true
+        type: string
+      name:
+        description: The name of the Kubernetes resource
+        required: true
+        type: string
+    secrets:
+      github-token:
+        description: The GitHub token to use for authentication
+        required: true
+      kubeconfig:
+        description: The Kubernetes configuration file
+        required: true
+
+jobs:
+  update-image-version:
+    runs-on: ${{ var.RUNNER }}
+    steps:
+      - name: Ensure Git is installed
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git
+              required: true
+      - name: Checkout other repo
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ inputs.repository }}
+          token: ${{ secrets.github-token }}
+
+      - name: Create new branch
+        run: git checkout -b "deploy_${{ inputs.image-name }}_${{ inputs.image-version }}"
+
+      - name: Update image version
+        run: |
+          # Update the image version in the YAML file
+          sed -i "s|${{ inputs.image-name }}:v[0-9.]*|${{ inputs.image-name }}:${{ inputs.image-version}}|g" ${{inputs.file-path}}
+
+          # Commit the changes
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git add ${inputs.file-path}
+          git commit -m "Update image version to ${{inputs.image-version}}"
+
+      - name: Push changes to new branch
+        run: git push origin "deploy_${{ inputs.image-name }}_${{ inputs.image-version }}"
+
+      - name: Verify image version
+        run: |
+          while true; do
+          IMAGE_VERSION_CHECK=$(kubectl get ${{inputs.kind}}/${{inputs.name}} -n ${{inputs.namespace}} -o jsonpath='{.spec.template.spec.containers[0].image}')
+          if [[ $IMAGE_VERSION_CHECK =~ ${{ inputs.image-name }}:${{ inputs.image-version }}$ ]]; then
+              echo "Image version is updated to ${{ inputs.image-name }}:${{ inputs.image-version }}"
+              break
+          else
+              echo "Image version is not yet updated, current version is ${IMAGE_VERSION_CHECK}, retrying..."
+              sleep 30
+          fi
+          done
+        timeout-minutes: 5
+
+      - name: Wait for resource to be stable and running with new image
+        run: |
+          while true; do
+            echo "Waiting for the resource to be available..."
+            if kubectl wait --for=condition=available --timeout=2s ${{ inputs.image-name }}:${{ inputs.image-version }} -n ${{inputs.namespace}}; then
+              echo "Resource is available!"
+              break
+            else
+              echo "Resource is not available yet, retrying..."
+              sleep 10
+            fi
+          done
+        timeout-minutes: 5

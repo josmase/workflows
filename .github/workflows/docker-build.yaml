@@ -8,6 +8,11 @@ on:
           The URL of the Docker registry where the image will be pushed.
         required: true
         type: string
+      registry_cache_url:
+        description: |
+          The registry that the build cache will be stored.
+        required: false
+        type: string
       name:
         description: |
           The name of the Docker image to be built and pushed. This typically includes the repository name.
@@ -45,7 +50,7 @@ on:
         required: true
 
 env:
-  KANIKO_CACHE_ARGS: "--cache=true --cache-copy-layers=true --cache-ttl=24h --cache-repo=${{ inputs.registry_url }}/${{ inputs.name }}-cache --compressed-caching=false"
+  KANIKO_CACHE_ARGS: "--cache=true --cache-copy-layers=true --cache-ttl=24h --cache-repo=${{ inputs.registry_cache_url }}/${{ inputs.name }}-cache --compressed-caching=false"
 
 jobs:
   build:
@@ -65,6 +70,10 @@ jobs:
           {
             "auths": {
               "${{ inputs.registry_url }}": {
+                "username": "${{ secrets.registry_username }}",
+                "password": "${{ secrets.registry_password }}"
+              },
+               "${{ inputs.registry_cache_url }}": {
                 "username": "${{ secrets.registry_username }}",
                 "password": "${{ secrets.registry_password }}"
               }

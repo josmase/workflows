@@ -94,7 +94,6 @@ jobs:
 
   verify-deployment:
     runs-on: ${{ vars.RUNNER }}
-    if: ${{ needs.update-image-version.outputs.changes-detected == 'true' }}
     needs: update-image-version
     steps:
       - name: Install required dependencies

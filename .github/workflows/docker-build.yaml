@@ -60,15 +60,6 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Install required dependencies
-        run: |
-          echo "Installing git"
-          sudo apt-get update
-          sudo apt-get install -y git gh
-      - name: Check out the repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # Fetch all history, including tags. Not good for large repos.
       - name: Set up Docker config
         run: |
           # Create Docker config directory if it doesn't exist
@@ -93,7 +84,7 @@ jobs:
       - name: Build Image
         run: |
           DOCKERFILE="${{ inputs.dockerfile }}"
-          CONTEXT="."
+          CONTEXT="${{ github.repositoryUrl }}#${{ github.ref_name }}#${{ github.sha }}"
 
           if [ "${{ inputs.push }}" = "true" ]; then
             DESTINATION="${{ inputs.registry_url }}/${{ inputs.name }}:${{ inputs.tag }}"
@@ -108,7 +99,6 @@ jobs:
           #else
           #  CACHE_ARGS=""
           #fi
-
           CACHE_ARGS=""
 
           echo "Dockerfile: $DOCKERFILE"

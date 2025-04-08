@@ -60,6 +60,10 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history, including tags. Not good for large repos.
       - name: Set up Docker config
         run: |
           # Create Docker config directory if it doesn't exist
@@ -84,7 +88,7 @@ jobs:
       - name: Build Image
         run: |
           DOCKERFILE="${{ inputs.dockerfile }}"
-          CONTEXT="${{ github.repositoryUrl }}#${{ github.ref_name  }}"
+          CONTEXT="."
 
           if [ "${{ inputs.push }}" = "true" ]; then
             DESTINATION="${{ inputs.registry_url }}/${{ inputs.name }}:${{ inputs.tag }}"

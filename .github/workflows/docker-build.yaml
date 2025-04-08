@@ -94,11 +94,13 @@ jobs:
             DEST_ARGS="--no-push"
           fi
 
-          if [ "${{ inputs.cache }}" = "true" ]; then
-            CACHE_ARGS="${{ env.KANIKO_CACHE_ARGS }}"
-          else
-            CACHE_ARGS=""
-          fi
+          #if [ "${{ inputs.cache }}" = "true" ]; then
+          #  CACHE_ARGS="${{ env.KANIKO_CACHE_ARGS }}"
+          #else
+          #  CACHE_ARGS=""
+          #fi
+
+          CACHE_ARGS=""
 
           echo "Dockerfile: $DOCKERFILE"
           echo "Context: $CONTEXT"

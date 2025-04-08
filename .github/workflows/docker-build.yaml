@@ -84,7 +84,7 @@ jobs:
       - name: Build Image
         run: |
           DOCKERFILE="${{ inputs.dockerfile }}"
-          CONTEXT="${{ github.repositoryUrl }}#${{ github.ref_name }}#${{ github.sha }}"
+          CONTEXT="${{ github.repositoryUrl }}#${{ github.ref }}#${{ github.sha }}"
 
           if [ "${{ inputs.push }}" = "true" ]; then
             DESTINATION="${{ inputs.registry_url }}/${{ inputs.name }}:${{ inputs.tag }}"

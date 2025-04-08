@@ -130,7 +130,7 @@ jobs:
 
 
           while true; do
-            IMAGE_VERSION_CHECK=$(kubectl get ${{inputs.kind}}/${{inputs.name}} -n ${{inputs.namespace}} -o jsonpath='${JSON_PATH}')
+            IMAGE_VERSION_CHECK=$(kubectl get ${{inputs.kind}}/${{inputs.name}} -n ${{inputs.namespace}} -o jsonpath=${JSON_PATH})
             if [[ $IMAGE_VERSION_CHECK =~ ${{ inputs.image-name }}:${{ inputs.image-version }} ]]; then
                 echo "Image version is updated to ${{ inputs.image-name }}:${{ inputs.image-version }}"
                 break

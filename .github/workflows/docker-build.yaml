@@ -81,10 +81,20 @@ jobs:
           }
           EOF
 
+      - name: Set CONTEXT
+        id: set_context
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            CONTEXT="${{ github.repositoryUrl }}#${{ github.head_ref }}"
+          else
+            CONTEXT="${{ github.repositoryUrl }}#${{ github.ref }}#${{ github.sha }}"
+          fi
+
+          echo "CONTEXT=$CONTEXT" >> $GITHUB_ENV  # Store in environment variable for later steps
+
       - name: Build Image
         run: |
           DOCKERFILE="${{ inputs.dockerfile }}"
-          CONTEXT="${{ github.repositoryUrl }}#${{ github.ref }}#${{ github.sha }}"
 
           if [ "${{ inputs.push }}" = "true" ]; then
             DESTINATION="${{ inputs.registry_url }}/${{ inputs.name }}:${{ inputs.tag }}"

@@ -90,7 +90,7 @@ jobs:
             CONTEXT="${{ github.repositoryUrl }}#${{ github.ref }}#${{ github.sha }}"
           fi
 
-          echo "CONTEXT=$CONTEXT" >> $GITHUB_ENV  # Store in environment variable for later steps
+          echo "CONTEXT=$CONTEXT" >> $GITHUB_ENV
 
       - name: Build Image
         run: |

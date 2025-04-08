@@ -60,10 +60,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: "20"
+      - name: Install required dependencies
+        run: |
+          echo "Installing git"
+          sudo apt-get update
+          sudo apt-get install -y git gh
       - name: Check out the repository
         uses: actions/checkout@v4
         with:

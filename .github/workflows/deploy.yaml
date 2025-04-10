@@ -145,14 +145,34 @@ jobs:
 
       - name: Wait for resource to be stable and running with new image
         run: |
-          while true; do
-            echo "Waiting for the resource to be available..."
-            if kubectl wait --for=condition=available --timeout=2s ${{inputs.kind}}/${{inputs.name}} -n ${{inputs.namespace}}; then
-              echo "Resource is available!"
-              break
+          if [ "${{inputs.kind}}" = "cronjob" ]; then
+            echo "Verifying CronJob has been scheduled correctly..."
+            if kubectl get cronjob/${{inputs.name}} -n ${{inputs.namespace}} -o jsonpath='{.spec.suspend}' | grep -q "false"; then
+              # Get the schedule and verify it's valid
+              SCHEDULE=$(kubectl get cronjob/${{inputs.name}} -n ${{inputs.namespace}} -o jsonpath='{.spec.schedule}')
+              if [ -n "$SCHEDULE" ]; then
+                echo "CronJob ${{inputs.name}} exists and is properly scheduled with schedule: $SCHEDULE"
+                echo "CronJob is not suspended and appears to be configured correctly"
+                exit 0
+              else
+                echo "CronJob ${{inputs.name}} doesn't have a valid schedule"
+                exit 1
+              fi
             else
-              echo "Resource is not available yet, retrying..."
-              sleep 10
+              echo "CronJob ${{inputs.name}} exists but is suspended"
+              exit 1
             fi
-          done
+          else
+            # Original logic for other resource types
+            while true; do
+              echo "Waiting for the resource to be available..."
+              if kubectl wait --for=condition=available --timeout=2s ${{inputs.kind}}/${{inputs.name}} -n ${{inputs.namespace}}; then
+                echo "Resource is available!"
+                break
+              else
+                echo "Resource is not available yet, retrying..."
+                sleep 10
+              fi
+            done
+          fi
         timeout-minutes: 5

@@ -60,7 +60,9 @@ jobs:
       - name: Update image version
         id: version
         run: |
-          # Update the image version in the YAML file
+          # Update the image version in the YAML file and remove any digest
+          sed -i -E "s|${{ inputs.image-name }}:v[0-9.]*(@sha256:[a-f0-9]*)?|${{ inputs.image-name }}:${{ inputs.image-version}}|g" ${{inputs.file-path}}
+          # Handle case where the first regex didn't match (fall back to original pattern)
           sed -i "s|${{ inputs.image-name }}:v[0-9.]*|${{ inputs.image-name }}:${{ inputs.image-version}}|g" ${{inputs.file-path}}
 
           if [[ `git status --porcelain` ]]; then

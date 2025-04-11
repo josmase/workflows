@@ -71,7 +71,7 @@ jobs:
 
           # Commit the changelog update
           git add CHANGELOG.md
-          git commit -m "Update changelog for $new_version"
+          git commit -m "release: $new_version"
 
       - name: Create Pull Request
         if: steps.version.outputs.changes-detected == 'true'

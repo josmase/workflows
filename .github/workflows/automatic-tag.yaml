@@ -36,14 +36,17 @@ jobs:
 
           # Extract the version from the commit message (format: "release: x.y.z" or "release-x.y.z")
           if [[ "$commit_message" =~ release[-:]\s* ]]; then
+            
             # Extract everything after "release:" or "release-"
             new_version="${commit_message##*release[-:]}"
             # Remove pull request references like (#123)
             new_version=$(echo "$new_version" | sed -r 's/\(#[0-9]+\)//g')
-            # Remove everything after the first newline character
-            new_version=$(echo "$new_version" | sed -e 's/\n.*$//' -e 's/\r.*$//')
+            # Take only the first line of the extracted version
+            new_version=$(echo "$new_version" | head -n 1)
             # Remove leading and trailing whitespace
             new_version=$(echo "$new_version" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+            echo "Processed version string: '$new_version'"
 
             if [[ "$new_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               echo "Version extracted: $new_version"

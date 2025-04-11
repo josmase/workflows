@@ -32,7 +32,7 @@ jobs:
           # Get the latest commit message
           commit_message=$(git log -1 --pretty=%B)
 
-          echo "Latest commit message: $commit_message"
+          echo "Latest commit message: '$commit_message'"
 
           # Extract the version from the commit message (format: "release: x.y.z" or "release-x.y.z")
           if [[ "$commit_message" =~ release[-:]\s* ]]; then
@@ -40,6 +40,8 @@ jobs:
             new_version="${commit_message##*release[-:]}"
             # Remove pull request references like (#123)
             new_version=$(echo "$new_version" | sed -r 's/\(#[0-9]+\)//g')
+            # Remove everything after the first newline character
+            new_version=$(echo "$new_version" | sed -e 's/\n.*$//' -e 's/\r.*$//')
             # Remove leading and trailing whitespace
             new_version=$(echo "$new_version" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 

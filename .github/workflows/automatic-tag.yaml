@@ -36,8 +36,12 @@ jobs:
 
           # Extract the version from the commit message (format: "release: x.y.z" or "release-x.y.z")
           if [[ "$commit_message" =~ release[-:]\s* ]]; then
+            # Extract everything after "release:" or "release-"
             new_version="${commit_message##*release[-:]}"
+            # Remove leading whitespace
             new_version="${new_version// /}"
+            # Remove pull request references like (#123)
+            new_version=$(echo "$new_version" | sed -r 's/\(#[0-9]+\)//g')
             if [[ "$new_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               echo "Version extracted: $new_version"
               echo "version=$new_version" >> $GITHUB_OUTPUT

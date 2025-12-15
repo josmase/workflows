@@ -60,10 +60,20 @@ jobs:
       - name: Update image version
         id: version
         run: |
-          # Update the image version in the YAML file and remove any digest
-          sed -i -E "s|${{ inputs.image-name }}:v[0-9.]*(@sha256:[a-f0-9]*)?|${{ inputs.image-name }}:${{ inputs.image-version}}|g" ${{inputs.file-path}}
-          # Handle case where the first regex didn't match (fall back to original pattern)
-          sed -i "s|${{ inputs.image-name }}:v[0-9.]*|${{ inputs.image-name }}:${{ inputs.image-version}}|g" ${{inputs.file-path}}
+          # Check if file is a HelmRelease (contains 'kind: HelmRelease')
+          if grep -q "kind: HelmRelease" ${{inputs.file-path}}; then
+            echo "Detected HelmRelease file, updating spec.values.image.tag"
+            # Update the tag value in HelmRelease
+            sed -i -E "s|(tag:\s+)\"?[v]?[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+-[a-f0-9]+\"?|\1\"${{ inputs.image-version}}\"|g" ${{inputs.file-path}}
+            # Also handle semantic version format like v0.0.86
+            sed -i -E "s|(tag:\s+)\"?v[0-9]+\.[0-9]+\.[0-9]+\"?|\1\"${{ inputs.image-version}}\"|g" ${{inputs.file-path}}
+          else
+            echo "Detected regular deployment file, updating image reference"
+            # Update the image version in the YAML file and remove any digest
+            sed -i -E "s|${{ inputs.image-name }}:v[0-9.]*(@sha256:[a-f0-9]*)?|${{ inputs.image-name }}:${{ inputs.image-version}}|g" ${{inputs.file-path}}
+            # Handle case where the first regex didn't match (fall back to original pattern)
+            sed -i "s|${{ inputs.image-name }}:v[0-9.]*|${{ inputs.image-name }}:${{ inputs.image-version}}|g" ${{inputs.file-path}}
+          fi
 
           if [[ `git status --porcelain` ]]; then
             echo "Changes detected"  

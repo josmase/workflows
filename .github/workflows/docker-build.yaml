@@ -1,4 +1,4 @@
-name: Buildkit Build
+name: Podman Build
 
 on:
   workflow_call:
@@ -25,7 +25,7 @@ on:
         default: "./Dockerfile"
       cache:
         description: |
-          Enables or disables caching for Docker builds. If enabled, Buildkit will use cache layers to speed up the build process.
+          Enables or disables caching for Docker builds. If enabled, Podman will use layer caching and the registry cache.
         type: boolean
         default: true
       push:
@@ -52,45 +52,52 @@ on:
 jobs:
   build:
     runs-on: ${{ vars.RUNNER }}
+    container:
+      image: podman:latest
     permissions:
       contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Buildkit
+      - name: Set up authentication
         run: |
-          # Create Docker config directory
-          mkdir -p ~/.docker
-          cat <<EOF > ~/.docker/config.json
+          mkdir -p $HOME/.config/containers
+          cat <<EOF > $HOME/.config/containers/auth.json
           {
             "auths": {
               "${{ inputs.registry_url }}": {
+                "username": "${{ secrets.registry_username }}",
+                "password": "${{ secrets.registry_password }}"
+              },
+              "${{ inputs.registry_cache_url }}": {
                 "username": "${{ secrets.registry_username }}",
                 "password": "${{ secrets.registry_password }}"
               }
             }
           }
           EOF
-          chmod 600 ~/.docker/config.json
+          chmod 600 $HOME/.config/containers/auth.json
 
       - name: Build and push image
         run: |
           # Build arguments
-          BUILD_ARGS="--file ${{ inputs.dockerfile }}"
+          BUILD_ARGS=""
           
           if [ "${{ inputs.push }}" = "true" ]; then
-            BUILD_ARGS="$BUILD_ARGS --tag ${{ inputs.registry_url }}/${{ inputs.name }}:${{ inputs.tag }}"
             BUILD_ARGS="$BUILD_ARGS --push"
-          else
-            BUILD_ARGS="$BUILD_ARGS --load"
+            BUILD_ARGS="$BUILD_ARGS -t ${{ inputs.registry_url }}/${{ inputs.name }}:${{ inputs.tag }}"
           fi
           
           # Cache configuration
           if [ "${{ inputs.cache }}" = "true" ]; then
-            BUILD_ARGS="$BUILD_ARGS --cache-from=type=registry,ref=${{ inputs.registry_url }}/${{ inputs.name }}:buildcache"
-            BUILD_ARGS="$BUILD_ARGS --cache-to=type=registry,ref=${{ inputs.registry_url }}/${{ inputs.name }}:buildcache,mode=max"
+            CACHE_REPO="${{ inputs.registry_cache_url }}/${{ inputs.name }}-cache:latest"
+            BUILD_ARGS="$BUILD_ARGS --cache-from=type=registry,ref=$CACHE_REPO"
+            if [ "${{ inputs.push }}" = "true" ]; then
+              BUILD_ARGS="$BUILD_ARGS --cache-to=type=registry,ref=$CACHE_REPO,mode=max"
+            fi
           fi
           
-          echo "Building image with buildx..."
-          docker buildx build $BUILD_ARGS .
+          echo "Building image with Podman..."
+          echo "Build args: $BUILD_ARGS"
+          podman build -f ${{ inputs.dockerfile }} $BUILD_ARGS .

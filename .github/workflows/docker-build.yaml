@@ -4,49 +4,30 @@ on:
   workflow_call:
     inputs:
       registry_url:
-        description: |
-          The URL of the Docker registry where the image will be pushed.
         required: true
         type: string
       registry_cache_url:
-        description: |
-          The registry that the build cache will be stored.
         required: false
         type: string
       name:
-        description: |
-          The name of the Docker image to be built and pushed. This typically includes the repository name.
         required: true
         type: string
       dockerfile:
-        description: |
-          The path to the Dockerfile used for building the Docker image.
         type: string
         default: "./Dockerfile"
       cache:
-        description: |
-          Enables or disables caching for Docker builds. If enabled, Kaniko will use layer caching and the registry cache.
         type: boolean
         default: true
       push:
-        description: |
-          Controls whether the image should be pushed to the registry. If set to false, the image will only be built and not pushed.
         type: boolean
         default: false
       tag:
-        description: |
-          The tag to be used for the Docker image.
         default: ""
         type: string
-
     secrets:
       registry_username:
-        description: |
-          The username for authentication with the Docker registry.
         required: true
       registry_password:
-        description: |
-          The password for authentication with the Docker registry.
         required: true
 
 jobs:
@@ -54,36 +35,33 @@ jobs:
     runs-on: ${{ vars.RUNNER }}
     permissions:
       contents: read
-    container:
-      image: gcr.io/kaniko-project/executor:v1.23.2
-      options: |
-        --dockerfile=${{ inputs.dockerfile }}
-        --destination=${{ inputs.registry_url }}/${{ inputs.name }}:${{ inputs.tag }}
-        --cache=${{ inputs.cache }}
-        ${{ inputs.cache && format('--cache-repo={0}/cache', inputs.registry_cache_url) || '' }}
-        ${{ inputs.push && '' || '--no-push' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
-      - name: Log build parameters
-        run: |
-          echo "Building image: ${{ inputs.registry_url }}/${{ inputs.name }}:${{ inputs.tag }}"
-          echo "Dockerfile: ${{ inputs.dockerfile }}"
-          echo "Cache enabled: ${{ inputs.cache }}"
-          echo "Push enabled: ${{ inputs.push }}"
-      
-      - name: Create registry credentials
+
+      - name: Build with Kaniko Job
         env:
           REGISTRY_URL: ${{ inputs.registry_url }}
           REGISTRY_USERNAME: ${{ secrets.registry_username }}
           REGISTRY_PASSWORD: ${{ secrets.registry_password }}
+          IMAGE_NAME: ${{ inputs.name }}
+          IMAGE_TAG: ${{ inputs.tag }}
+          DOCKERFILE: ${{ inputs.dockerfile }}
+          CACHE_ENABLED: ${{ inputs.cache }}
+          CACHE_REPO: ${{ inputs.registry_cache_url }}
+          PUSH_ENABLED: ${{ inputs.push }}
         run: |
-          # Kaniko hooks will use the injected env vars to build
-          # The Job is automatically created by the container hooks
-          # This step just ensures Kaniko has what it needs
-          mkdir -p /.docker
-          cat > /.docker/config.json <<EOF
+          set -euo pipefail
+
+          JOB_NAME="kaniko-$(date +%s)"
+          NAMESPACE="${ACTIONS_RUNNER_POD_NAMESPACE:-arc-runners}"
+          IMAGE_REF="${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
+          
+          echo "Building: ${IMAGE_REF}"
+          
+          # Create docker config
+          mkdir -p /tmp/kaniko
+          cat > /tmp/kaniko/config.json <<EOF
           {
             "auths": {
               "${REGISTRY_URL}": {
@@ -93,3 +71,78 @@ jobs:
             }
           }
           EOF
+          
+          # Create tarball of source
+          tar czf /tmp/context.tar.gz -C ${GITHUB_WORKSPACE} .
+          
+          # Create secrets/configmaps
+          kubectl create secret generic ${JOB_NAME}-creds \
+            --from-file=config.json=/tmp/kaniko/config.json \
+            -n ${NAMESPACE}
+          
+          kubectl create configmap ${JOB_NAME}-context \
+            --from-file=context.tar.gz=/tmp/context.tar.gz \
+            -n ${NAMESPACE}
+          
+          # Build args
+          ARGS="--dockerfile=${DOCKERFILE} --context=/workspace --destination=${IMAGE_REF}"
+          [ "${CACHE_ENABLED}" = "true" ] && [ -n "${CACHE_REPO}" ] && ARGS="${ARGS} --cache=true --cache-repo=${CACHE_REPO}/cache"
+          [ "${PUSH_ENABLED}" = "false" ] && ARGS="${ARGS} --no-push"
+          
+          # Create Job
+          cat <<EOF | kubectl apply -f -
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: ${JOB_NAME}
+            namespace: ${NAMESPACE}
+          spec:
+            ttlSecondsAfterFinished: 300
+            backoffLimit: 0
+            template:
+              spec:
+                serviceAccountName: github-runner
+                restartPolicy: Never
+                initContainers:
+                - name: extract
+                  image: busybox:1.36
+                  command: ['sh', '-c', 'tar xzf /context/context.tar.gz -C /workspace']
+                  volumeMounts:
+                  - name: context
+                    mountPath: /context
+                  - name: workspace
+                    mountPath: /workspace
+                containers:
+                - name: kaniko
+                  image: gcr.io/kaniko-project/executor:v1.23.2
+                  args: 
+                  - ${ARGS}
+                  volumeMounts:
+                  - name: workspace
+                    mountPath: /workspace
+                  - name: docker-config
+                    mountPath: /kaniko/.docker
+                  resources:
+                    limits:
+                      memory: "2Gi"
+                      cpu: "2"
+                volumes:
+                - name: context
+                  configMap:
+                    name: ${JOB_NAME}-context
+                - name: workspace
+                  emptyDir: {}
+                - name: docker-config
+                  secret:
+                    secretName: ${JOB_NAME}-creds
+          EOF
+          
+          # Wait for completion
+          kubectl wait --for=condition=complete job/${JOB_NAME} -n ${NAMESPACE} --timeout=1h || {
+            kubectl logs -l batch.kubernetes.io/job-name=${JOB_NAME} -n ${NAMESPACE}
+            kubectl delete job/${JOB_NAME} secret/${JOB_NAME}-creds configmap/${JOB_NAME}-context -n ${NAMESPACE}
+            exit 1
+          }
+          
+          echo "Build complete!"
+          kubectl delete secret/${JOB_NAME}-creds configmap/${JOB_NAME}-context -n ${NAMESPACE}

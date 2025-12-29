@@ -88,6 +88,8 @@ jobs:
           KANIKO_ARGS="[\"--dockerfile=${DOCKERFILE}\",\"--context=/workspace\",\"--destination=${IMAGE_REF}\""
           [ "${CACHE_ENABLED}" = "true" ] && [ -n "${CACHE_REPO}" ] && KANIKO_ARGS="${KANIKO_ARGS},\"--cache=true\",\"--cache-repo=${CACHE_REPO}/cache\""
           [ "${PUSH_ENABLED}" = "false" ] && KANIKO_ARGS="${KANIKO_ARGS},\"--no-push\""
+          # Reduce snapshot overhead
+          KANIKO_ARGS="${KANIKO_ARGS},\"--snapshotMode=time\",\"--reproducible\""
           KANIKO_ARGS="${KANIKO_ARGS}]"
 
           # Create Job
@@ -124,7 +126,7 @@ jobs:
                     mountPath: /kaniko/.docker
                   resources:
                     limits:
-                      memory: "8Gi"
+                      memory: "5Gi"
                       cpu: "2"
                 volumes:
                 - name: context

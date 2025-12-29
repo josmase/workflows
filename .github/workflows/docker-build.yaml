@@ -52,8 +52,6 @@ on:
 jobs:
   build:
     runs-on: ${{ vars.RUNNER }}
-    container:
-      image: artifactory.local.hejsan.xyz/docker/podman/stable:v5.7.1
     permissions:
       contents: read
     steps:
@@ -81,23 +79,28 @@ jobs:
 
       - name: Build and push image
         run: |
-          # Build arguments
-          BUILD_ARGS=""
-          
-          if [ "${{ inputs.push }}" = "true" ]; then
-            BUILD_ARGS="$BUILD_ARGS --push"
-            BUILD_ARGS="$BUILD_ARGS -t ${{ inputs.registry_url }}/${{ inputs.name }}:${{ inputs.tag }}"
-          fi
-          
-          # Cache configuration
-          if [ "${{ inputs.cache }}" = "true" ]; then
+          set -euxo pipefail
+
+          IMAGE_REF="${{ inputs.registry_url }}/${{ inputs.name }}:${{ inputs.tag }}"
+
+          # Optional cache: pre-pull cache image to seed local layers
+          if [ "${{ inputs.cache }}" = "true" ] && [ -n "${{ inputs.registry_cache_url }}" ]; then
             CACHE_REPO="${{ inputs.registry_cache_url }}/${{ inputs.name }}-cache:latest"
-            BUILD_ARGS="$BUILD_ARGS --cache-from=type=registry,ref=$CACHE_REPO"
-            if [ "${{ inputs.push }}" = "true" ]; then
-              BUILD_ARGS="$BUILD_ARGS --cache-to=type=registry,ref=$CACHE_REPO,mode=max"
+            echo "Attempting to pre-pull cache image: $CACHE_REPO"
+            podman pull "$CACHE_REPO" || echo "Cache image not available yet"
+          fi
+
+          echo "Building image with Podman..."
+          podman build --layers -f "${{ inputs.dockerfile }}" -t "$IMAGE_REF" .
+
+          if [ "${{ inputs.push }}" = "true" ]; then
+            echo "Pushing $IMAGE_REF"
+            podman push "$IMAGE_REF"
+            # Optionally update cache tag to latest for future builds
+            if [ "${{ inputs.cache }}" = "true" ] && [ -n "${{ inputs.registry_cache_url }}" ]; then
+              CACHE_REPO="${{ inputs.registry_cache_url }}/${{ inputs.name }}-cache:latest"
+              echo "Updating cache reference: $CACHE_REPO"
+              podman tag "$IMAGE_REF" "$CACHE_REPO" || true
+              podman push "$CACHE_REPO" || true
             fi
           fi
-          
-          echo "Building image with Podman..."
-          echo "Build args: $BUILD_ARGS"
-          podman build -f ${{ inputs.dockerfile }} $BUILD_ARGS .

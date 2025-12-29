@@ -124,7 +124,7 @@ jobs:
                     mountPath: /kaniko/.docker
                   resources:
                     limits:
-                      memory: "5Gi"
+                      memory: "8Gi"
                       cpu: "2"
                 volumes:
                 - name: context
@@ -161,6 +161,15 @@ jobs:
               echo ""
               echo "Pod status:"
               kubectl get pods -l job-name=${JOB_NAME} -n ${NAMESPACE}
+              POD_NAME=$(kubectl get pods -l job-name=${JOB_NAME} -n ${NAMESPACE} -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+              if [ -n "$POD_NAME" ]; then
+                echo ""
+                echo "Pod describe:"
+                kubectl describe pod/${POD_NAME} -n ${NAMESPACE} || true
+                echo ""
+                echo "Last 50 lines of pod logs:"
+                kubectl logs ${POD_NAME} -n ${NAMESPACE} --tail=50 || true
+              fi
               echo ""
               echo "Last 50 lines of logs:"
               kubectl logs job/${JOB_NAME} -n ${NAMESPACE} --tail=50

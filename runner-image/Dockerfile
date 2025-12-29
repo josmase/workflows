@@ -33,10 +33,13 @@ ENV XDG_RUNTIME_DIR=/home/runner/.local/run
 # Optional: pre-create auth/config locations
 RUN mkdir -p /home/runner/.config/containers && chown -R runner:runner /home/runner/.config
 
-# Configure subuid/subgid for rootless Podman and ensure uidmap binaries are SUID
+# Configure subuid/subgid for rootless Podman
+# Use capabilities instead of SUID for newuidmap/newgidmap (per OpenShift best practices)
 RUN echo "runner:100000:65536" >> /etc/subuid && \
   echo "runner:100000:65536" >> /etc/subgid && \
-  chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap || true
+  chmod u-s /usr/bin/newuidmap /usr/bin/newgidmap 2>/dev/null || true && \
+  setcap cap_setuid+eip /usr/bin/newuidmap && \
+  setcap cap_setgid+eip /usr/bin/newgidmap
 
 # Switch back to runner user for job steps
 USER runner

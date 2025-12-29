@@ -1,4 +1,4 @@
-name: Podman Build
+name: Kaniko Build
 
 on:
   workflow_call:
@@ -25,7 +25,7 @@ on:
         default: "./Dockerfile"
       cache:
         description: |
-          Enables or disables caching for Docker builds. If enabled, Podman will use layer caching and the registry cache.
+          Enables or disables caching for Docker builds. If enabled, Kaniko will use layer caching and the registry cache.
         type: boolean
         default: true
       push:
@@ -58,49 +58,47 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up authentication
+      - name: Build with Kaniko
         run: |
-          mkdir -p $HOME/.config/containers
-          cat <<EOF > $HOME/.config/containers/auth.json
+          set -euxo pipefail
+
+          IMAGE_REF="${{ inputs.registry_url }}/${{ inputs.name }}:${{ inputs.tag }}"
+          
+          # Create temp directory for docker config
+          mkdir -p /tmp/kaniko/.docker
+          
+          # Prepare Kaniko config with registry credentials
+          cat > /tmp/kaniko/.docker/config.json <<EOF
           {
             "auths": {
               "${{ inputs.registry_url }}": {
-                "username": "${{ secrets.registry_username }}",
-                "password": "${{ secrets.registry_password }}"
-              },
-              "${{ inputs.registry_cache_url }}": {
                 "username": "${{ secrets.registry_username }}",
                 "password": "${{ secrets.registry_password }}"
               }
             }
           }
           EOF
-          chmod 600 $HOME/.config/containers/auth.json
 
-      - name: Build and push image
-        run: |
-          set -euxo pipefail
-
-          IMAGE_REF="${{ inputs.registry_url }}/${{ inputs.name }}:${{ inputs.tag }}"
-
-          # Optional cache: pre-pull cache image to seed local layers
-          if [ "${{ inputs.cache }}" = "true" ] && [ -n "${{ inputs.registry_cache_url }}" ]; then
-            CACHE_REPO="${{ inputs.registry_cache_url }}/${{ inputs.name }}-cache:latest"
-            echo "Attempting to pre-pull cache image: $CACHE_REPO"
-            podman pull "$CACHE_REPO" || echo "Cache image not available yet"
-          fi
-
-          echo "Building image with Podman..."
-          podman build --layers -f "${{ inputs.dockerfile }}" -t "$IMAGE_REF" .
-
-          if [ "${{ inputs.push }}" = "true" ]; then
-            echo "Pushing $IMAGE_REF"
-            podman push "$IMAGE_REF"
-            # Optionally update cache tag to latest for future builds
-            if [ "${{ inputs.cache }}" = "true" ] && [ -n "${{ inputs.registry_cache_url }}" ]; then
-              CACHE_REPO="${{ inputs.registry_cache_url }}/${{ inputs.name }}-cache:latest"
-              echo "Updating cache reference: $CACHE_REPO"
-              podman tag "$IMAGE_REF" "$CACHE_REPO" || true
-              podman push "$CACHE_REPO" || true
+          # Build options
+          BUILD_ARGS="--dockerfile=${{ inputs.dockerfile }} --destination=$IMAGE_REF"
+          
+          # Add cache options if cache is enabled
+          if [ "${{ inputs.cache }}" = "true" ]; then
+            BUILD_ARGS="$BUILD_ARGS --cache=true"
+            if [ -n "${{ inputs.registry_cache_url }}" ]; then
+              BUILD_ARGS="$BUILD_ARGS --cache-repo=${{ inputs.registry_cache_url }}/cache"
             fi
           fi
+          
+          # Only push if requested
+          if [ "${{ inputs.push }}" = "false" ]; then
+            BUILD_ARGS="$BUILD_ARGS --no-push"
+          fi
+
+          echo "Building image with Kaniko..."
+          docker run --rm \
+            -v $(pwd):/workspace \
+            -v /tmp/kaniko/.docker:/.docker \
+            -w /workspace \
+            gcr.io/kaniko-project/executor:v1.23.2 \
+            $BUILD_ARGS

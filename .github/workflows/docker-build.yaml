@@ -54,53 +54,42 @@ jobs:
     runs-on: ${{ vars.RUNNER }}
     permissions:
       contents: read
+    container:
+      image: gcr.io/kaniko-project/executor:v1.23.2
+      options: |
+        --dockerfile=${{ inputs.dockerfile }}
+        --destination=${{ inputs.registry_url }}/${{ inputs.name }}:${{ inputs.tag }}
+        --cache=${{ inputs.cache }}
+        ${{ inputs.cache && format('--cache-repo={0}/cache', inputs.registry_cache_url) || '' }}
+        ${{ inputs.push && '' || '--no-push' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Build with Kaniko
+      
+      - name: Log build parameters
         run: |
-          set -euxo pipefail
-
-          IMAGE_REF="${{ inputs.registry_url }}/${{ inputs.name }}:${{ inputs.tag }}"
-          
-          # Prepare registry credentials for docker/podman
-          mkdir -p ~/.docker
-          cat > ~/.docker/config.json <<EOF
+          echo "Building image: ${{ inputs.registry_url }}/${{ inputs.name }}:${{ inputs.tag }}"
+          echo "Dockerfile: ${{ inputs.dockerfile }}"
+          echo "Cache enabled: ${{ inputs.cache }}"
+          echo "Push enabled: ${{ inputs.push }}"
+      
+      - name: Create registry credentials
+        env:
+          REGISTRY_URL: ${{ inputs.registry_url }}
+          REGISTRY_USERNAME: ${{ secrets.registry_username }}
+          REGISTRY_PASSWORD: ${{ secrets.registry_password }}
+        run: |
+          # Kaniko hooks will use the injected env vars to build
+          # The Job is automatically created by the container hooks
+          # This step just ensures Kaniko has what it needs
+          mkdir -p /.docker
+          cat > /.docker/config.json <<EOF
           {
             "auths": {
-              "${{ inputs.registry_url }}": {
-                "username": "${{ secrets.registry_username }}",
-                "password": "${{ secrets.registry_password }}"
+              "${REGISTRY_URL}": {
+                "username": "${REGISTRY_USERNAME}",
+                "password": "${REGISTRY_PASSWORD}"
               }
             }
           }
           EOF
-          
-          # Build options for Kaniko
-          BUILD_ARGS="--dockerfile=${{ inputs.dockerfile }} --destination=$IMAGE_REF"
-          
-          # Add cache options if cache is enabled
-          if [ "${{ inputs.cache }}" = "true" ]; then
-            BUILD_ARGS="$BUILD_ARGS --cache=true"
-            if [ -n "${{ inputs.registry_cache_url }}" ]; then
-              BUILD_ARGS="$BUILD_ARGS --cache-repo=${{ inputs.registry_cache_url }}/cache"
-            fi
-          fi
-          
-          # Only push if requested
-          if [ "${{ inputs.push }}" = "false" ]; then
-            BUILD_ARGS="$BUILD_ARGS --no-push"
-          fi
-
-          echo "Building image with Kaniko..."
-          
-          # On Kubernetes runners with container hooks, this docker command will be intercepted
-          # and converted to a Kubernetes Job running Kaniko. On standard runners with Docker,
-          # it will execute Kaniko via docker run or podman run.
-          docker run --rm \
-            -v $(pwd):/workspace \
-            -v ~/.docker:/.docker \
-            -w /workspace \
-            gcr.io/kaniko-project/executor:v1.23.2 \
-            $BUILD_ARGS

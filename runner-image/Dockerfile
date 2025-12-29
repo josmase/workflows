@@ -11,10 +11,10 @@ USER root
 # - crun: fast OCI runtime preferred by podman
 # - jq,curl,ca-certificates: common CLI tools
 RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      podman buildah skopeo slirp4netns fuse-overlayfs crun \
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+  podman buildah skopeo slirp4netns fuse-overlayfs crun uidmap \
   jq curl ca-certificates git gh && \
-    rm -rf /var/lib/apt/lists/*
+  rm -rf /var/lib/apt/lists/*
 
 # Install buildctl (BuildKit CLI)
 ARG BUILDKIT_VERSION=v0.13.2
@@ -32,6 +32,11 @@ ENV XDG_RUNTIME_DIR=/home/runner/.local/run
 
 # Optional: pre-create auth/config locations
 RUN mkdir -p /home/runner/.config/containers && chown -R runner:runner /home/runner/.config
+
+# Configure subuid/subgid for rootless Podman and ensure uidmap binaries are SUID
+RUN echo "runner:100000:65536" >> /etc/subuid && \
+  echo "runner:100000:65536" >> /etc/subgid && \
+  chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap || true
 
 # Switch back to runner user for job steps
 USER runner

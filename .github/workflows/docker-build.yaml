@@ -85,8 +85,11 @@ jobs:
             --from-file=context.tar.gz=/tmp/context.tar.gz \
             -n ${NAMESPACE}
 
-          # BuildKit cache disabled (issues during cache export/import)
+          # BuildKit cache flags (registry-based)
           CACHE_FLAGS=""
+          if [ "${CACHE_ENABLED}" = "true" ] && [ -n "${CACHE_IMAGE}" ]; then
+            CACHE_FLAGS="--export-cache type=registry,ref=${CACHE_IMAGE},mode=max --import-cache type=registry,ref=${CACHE_IMAGE}"
+          fi
 
           # Create Job
           cat <<EOF | kubectl apply -f -
@@ -131,7 +134,8 @@ jobs:
                       --local context=/workspace \
                       --local dockerfile=/workspace \
                       --opt filename=${DOCKERFILE} \
-                      --output type=image,name=${IMAGE_REF},push=${PUSH_ENABLED}
+                      --output type=image,name=${IMAGE_REF},push=${PUSH_ENABLED} \
+                      ${CACHE_FLAGS}
                   volumeMounts:
                   - name: workspace
                     mountPath: /workspace

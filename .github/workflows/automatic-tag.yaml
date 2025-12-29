@@ -11,11 +11,6 @@ jobs:
     runs-on: ${{ vars.RUNNER }}
 
     steps:
-      - name: Ensure Git is installed
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y git
-
       - name: Check out the repository
         uses: actions/checkout@v4
         with:

@@ -11,11 +11,6 @@ jobs:
     runs-on: ${{ vars.RUNNER }}
 
     steps:
-      - name: Ensure Git and Github CLI is installed
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y git gh
-
       - name: Check out the repository
         uses: actions/checkout@v4
         with:

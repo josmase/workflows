@@ -13,7 +13,7 @@ USER root
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       podman buildah skopeo slirp4netns fuse-overlayfs crun \
-      jq curl ca-certificates && \
+  jq curl ca-certificates git gh && \
     rm -rf /var/lib/apt/lists/*
 
 # Install buildctl (BuildKit CLI)

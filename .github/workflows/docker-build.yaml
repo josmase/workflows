@@ -124,7 +124,7 @@ jobs:
                     mountPath: /kaniko/.docker
                   resources:
                     limits:
-                      memory: "2Gi"
+                      memory: "5Gi"
                       cpu: "2"
                 volumes:
                 - name: context

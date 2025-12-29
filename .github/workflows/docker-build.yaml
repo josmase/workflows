@@ -102,6 +102,9 @@ jobs:
             ttlSecondsAfterFinished: 300
             backoffLimit: 0
             template:
+              metadata:
+                annotations:
+                  container.apparmor.security.beta.kubernetes.io/buildkit: unconfined
               spec:
                 serviceAccountName: github-runner
                 restartPolicy: Never

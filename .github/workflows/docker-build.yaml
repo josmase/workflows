@@ -53,7 +53,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          JOB_NAME="kaniko-$(date +%s)"
+          JOB_NAME="buildkit-$(date +%s)"
           NAMESPACE="${ACTIONS_RUNNER_POD_NAMESPACE:-arc-runners}"
           IMAGE_REF="${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
           CACHE_IMAGE="${CACHE_REPO:+${CACHE_REPO}/cache}"
@@ -102,9 +102,6 @@ jobs:
             ttlSecondsAfterFinished: 300
             backoffLimit: 0
             template:
-              metadata:
-                annotations:
-                  container.apparmor.security.beta.kubernetes.io/buildkit: unconfined
               spec:
                 serviceAccountName: github-runner
                 restartPolicy: Never
@@ -125,6 +122,9 @@ jobs:
                     value: /docker-config
                   - name: BUILDKITD_FLAGS
                     value: --oci-worker-no-process-sandbox
+                  securityContext:
+                    appArmorProfile:
+                      type: Unconfined
                   command: ["/bin/sh", "-c"]
                   args:
                   - |

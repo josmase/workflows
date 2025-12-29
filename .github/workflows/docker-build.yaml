@@ -56,9 +56,9 @@ jobs:
           JOB_NAME="kaniko-$(date +%s)"
           NAMESPACE="${ACTIONS_RUNNER_POD_NAMESPACE:-arc-runners}"
           IMAGE_REF="${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
-          
+
           echo "Building: ${IMAGE_REF}"
-          
+
           # Create docker config
           mkdir -p /tmp/kaniko
           cat > /tmp/kaniko/config.json <<EOF
@@ -71,24 +71,25 @@ jobs:
             }
           }
           EOF
-          
+
           # Create tarball of source
           tar czf /tmp/context.tar.gz -C ${GITHUB_WORKSPACE} .
-          
+
           # Create secrets/configmaps
           kubectl create secret generic ${JOB_NAME}-creds \
             --from-file=config.json=/tmp/kaniko/config.json \
             -n ${NAMESPACE}
-          
+
           kubectl create configmap ${JOB_NAME}-context \
             --from-file=context.tar.gz=/tmp/context.tar.gz \
             -n ${NAMESPACE}
-          
-          # Build args
-          ARGS="--dockerfile=${DOCKERFILE} --context=/workspace --destination=${IMAGE_REF}"
-          [ "${CACHE_ENABLED}" = "true" ] && [ -n "${CACHE_REPO}" ] && ARGS="${ARGS} --cache=true --cache-repo=${CACHE_REPO}/cache"
-          [ "${PUSH_ENABLED}" = "false" ] && ARGS="${ARGS} --no-push"
-          
+
+          # Build Kaniko args array
+          KANIKO_ARGS="[\"--dockerfile=${DOCKERFILE}\",\"--context=/workspace\",\"--destination=${IMAGE_REF}\""
+          [ "${CACHE_ENABLED}" = "true" ] && [ -n "${CACHE_REPO}" ] && KANIKO_ARGS="${KANIKO_ARGS},\"--cache=true\",\"--cache-repo=${CACHE_REPO}/cache\""
+          [ "${PUSH_ENABLED}" = "false" ] && KANIKO_ARGS="${KANIKO_ARGS},\"--no-push\""
+          KANIKO_ARGS="${KANIKO_ARGS}]"
+
           # Create Job
           cat <<EOF | kubectl apply -f -
           apiVersion: batch/v1
@@ -115,8 +116,7 @@ jobs:
                 containers:
                 - name: kaniko
                   image: gcr.io/kaniko-project/executor:v1.23.2
-                  args: 
-                  - ${ARGS}
+                  args: ${KANIKO_ARGS}
                   volumeMounts:
                   - name: workspace
                     mountPath: /workspace
@@ -136,13 +136,24 @@ jobs:
                   secret:
                     secretName: ${JOB_NAME}-creds
           EOF
-          
+
           # Wait for completion
-          kubectl wait --for=condition=complete job/${JOB_NAME} -n ${NAMESPACE} --timeout=1h || {
-            kubectl logs -l batch.kubernetes.io/job-name=${JOB_NAME} -n ${NAMESPACE}
+          echo "Waiting for Job to start..."
+          sleep 5
+
+          # Stream logs while job is running
+          kubectl logs -f job/${JOB_NAME} -n ${NAMESPACE} &
+          LOG_PID=$!
+
+          # Wait for completion
+          if kubectl wait --for=condition=complete job/${JOB_NAME} -n ${NAMESPACE} --timeout=1h; then
+            wait ${LOG_PID} 2>/dev/null || true
+            echo "Build complete!"
+            kubectl delete job/${JOB_NAME} secret/${JOB_NAME}-creds configmap/${JOB_NAME}-context -n ${NAMESPACE}
+          else
+            wait ${LOG_PID} 2>/dev/null || true
+            echo "Build failed! Job logs:"
+            kubectl logs job/${JOB_NAME} -n ${NAMESPACE} --tail=100
             kubectl delete job/${JOB_NAME} secret/${JOB_NAME}-creds configmap/${JOB_NAME}-context -n ${NAMESPACE}
             exit 1
-          }
-          
-          echo "Build complete!"
-          kubectl delete secret/${JOB_NAME}-creds configmap/${JOB_NAME}-context -n ${NAMESPACE}
+          fi

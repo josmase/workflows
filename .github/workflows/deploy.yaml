@@ -35,6 +35,9 @@ on:
       github-token:
         description: The GitHub token to use for authentication
         required: true
+      kubeconfig:
+        description: "Deprecated: kubeconfig content (prefer in-cluster RBAC)"
+        required: false
 
 jobs:
   update-image-version:

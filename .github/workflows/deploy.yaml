@@ -107,17 +107,31 @@ jobs:
           JSON_PATH="{.spec.template.spec.containers[0].image}" 
           if [[ ${{inputs.kind}} == "cronjob" ]]; then
             JSON_PATH="{.spec.jobTemplate.spec.template.spec.containers[0].image}"
+          elif [[ ${{inputs.kind}} == "helmrelease" ]]; then
+            JSON_PATH="{.spec.values.image.tag}"
           fi
 
 
           while true; do
             IMAGE_VERSION_CHECK=$(kubectl get ${{inputs.kind}}/${{inputs.name}} -n ${{inputs.namespace}} -o jsonpath=${JSON_PATH})
-            if [[ $IMAGE_VERSION_CHECK =~ ${{ inputs.image-name }}:${{ inputs.image-version }} ]]; then
+            
+            # For HelmRelease, we only check the tag value (not full image reference)
+            if [[ ${{inputs.kind}} == "helmrelease" ]]; then
+              if [[ "$IMAGE_VERSION_CHECK" == "${{ inputs.image-version }}" ]]; then
+                echo "HelmRelease image tag is updated to ${{ inputs.image-version }}"
+                break
+              else
+                echo "HelmRelease image tag is not yet updated, current tag is ${IMAGE_VERSION_CHECK}, expected ${{ inputs.image-version }}, retrying..."
+                sleep 30
+              fi
+            else
+              if [[ $IMAGE_VERSION_CHECK =~ ${{ inputs.image-name }}:${{ inputs.image-version }} ]]; then
                 echo "Image version is updated to ${{ inputs.image-name }}:${{ inputs.image-version }}"
                 break
-            else
+              else
                 echo "Image version is not yet updated, current version is ${IMAGE_VERSION_CHECK}, retrying..."
                 sleep 30
+              fi
             fi
           done
         timeout-minutes: 5
@@ -141,6 +155,18 @@ jobs:
               echo "CronJob ${{inputs.name}} exists but is suspended"
               exit 1
             fi
+          elif [ "${{inputs.kind}}" = "helmrelease" ]; then
+            echo "Verifying HelmRelease is ready..."
+            while true; do
+              READY=$(kubectl get helmrelease/${{inputs.name}} -n ${{inputs.namespace}} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')
+              if [ "$READY" = "True" ]; then
+                echo "HelmRelease ${{inputs.name}} is ready!"
+                break
+              else
+                echo "HelmRelease ${{inputs.name}} is not ready yet, retrying..."
+                sleep 10
+              fi
+            done
           else
             # Original logic for other resource types
             while true; do

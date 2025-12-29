@@ -64,11 +64,9 @@ jobs:
 
           IMAGE_REF="${{ inputs.registry_url }}/${{ inputs.name }}:${{ inputs.tag }}"
           
-          # Create temp directory for docker config
-          mkdir -p /tmp/kaniko/.docker
-          
-          # Prepare Kaniko config with registry credentials
-          cat > /tmp/kaniko/.docker/config.json <<EOF
+          # Prepare registry credentials for docker/podman
+          mkdir -p ~/.docker
+          cat > ~/.docker/config.json <<EOF
           {
             "auths": {
               "${{ inputs.registry_url }}": {
@@ -78,8 +76,8 @@ jobs:
             }
           }
           EOF
-
-          # Build options
+          
+          # Build options for Kaniko
           BUILD_ARGS="--dockerfile=${{ inputs.dockerfile }} --destination=$IMAGE_REF"
           
           # Add cache options if cache is enabled
@@ -96,9 +94,13 @@ jobs:
           fi
 
           echo "Building image with Kaniko..."
+          
+          # On Kubernetes runners with container hooks, this docker command will be intercepted
+          # and converted to a Kubernetes Job running Kaniko. On standard runners with Docker,
+          # it will execute Kaniko via docker run or podman run.
           docker run --rm \
             -v $(pwd):/workspace \
-            -v /tmp/kaniko/.docker:/.docker \
+            -v ~/.docker:/.docker \
             -w /workspace \
             gcr.io/kaniko-project/executor:v1.23.2 \
             $BUILD_ARGS

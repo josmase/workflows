@@ -9,7 +9,7 @@ IMAGE_DIR="$REPO_ROOT_DIR/workflows/runner-image"
 TAG_FILE="$IMAGE_DIR/TAG"
 
 REGISTRY="${REGISTRY:-artifactory.local.hejsan.xyz}"
-IMAGE_PATH="${IMAGE_PATH:-docker/actions/runner-podman-buildkit}"
+IMAGE_PATH="${IMAGE_PATH:-docker/actions/runner-kaniko}"
 
 if [[ ! -f "$TAG_FILE" ]]; then
   echo "TAG file not found: $TAG_FILE" >&2

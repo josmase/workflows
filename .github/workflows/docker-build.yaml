@@ -56,6 +56,7 @@ jobs:
           JOB_NAME="kaniko-$(date +%s)"
           NAMESPACE="${ACTIONS_RUNNER_POD_NAMESPACE:-arc-runners}"
           IMAGE_REF="${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
+          CACHE_IMAGE="${CACHE_REPO:+${CACHE_REPO}/cache}"
 
           echo "Building: ${IMAGE_REF}"
 
@@ -84,13 +85,11 @@ jobs:
             --from-file=context.tar.gz=/tmp/context.tar.gz \
             -n ${NAMESPACE}
 
-          # Build Kaniko args array
-          KANIKO_ARGS="[\"--dockerfile=${DOCKERFILE}\",\"--context=/workspace\",\"--destination=${IMAGE_REF}\""
-          [ "${CACHE_ENABLED}" = "true" ] && [ -n "${CACHE_REPO}" ] && KANIKO_ARGS="${KANIKO_ARGS},\"--cache=true\",\"--cache-repo=${CACHE_REPO}/cache\""
-          [ "${PUSH_ENABLED}" = "false" ] && KANIKO_ARGS="${KANIKO_ARGS},\"--no-push\""
-          # Reduce snapshot overhead
-          KANIKO_ARGS="${KANIKO_ARGS},\"--snapshotMode=time\",\"--reproducible\""
-          KANIKO_ARGS="${KANIKO_ARGS}]"
+          # BuildKit cache flags (registry-based)
+          CACHE_FLAGS=""
+          if [ "${CACHE_ENABLED}" = "true" ] && [ -n "${CACHE_IMAGE}" ]; then
+            CACHE_FLAGS="--export-cache type=registry,ref=${CACHE_IMAGE},mode=max --import-cache type=registry,ref=${CACHE_IMAGE}"
+          fi
 
           # Create Job
           cat <<EOF | kubectl apply -f -
@@ -116,14 +115,29 @@ jobs:
                   - name: workspace
                     mountPath: /workspace
                 containers:
-                - name: kaniko
-                  image: gcr.io/kaniko-project/executor:v1.23.2
-                  args: ${KANIKO_ARGS}
+                - name: buildkit
+                  image: moby/buildkit:rootless
+                  env:
+                  - name: DOCKER_CONFIG
+                    value: /docker-config
+                  - name: BUILDKITD_FLAGS
+                    value: --oci-worker-no-process-sandbox
+                  command: ["/bin/sh", "-c"]
+                  args:
+                  - |
+                    set -e
+                    buildctl-daemonless.sh build \
+                      --frontend dockerfile.v0 \
+                      --local context=/workspace \
+                      --local dockerfile=/workspace \
+                      --opt filename=${DOCKERFILE} \
+                      --output type=image,name=${IMAGE_REF},push=${PUSH_ENABLED} \
+                      ${CACHE_FLAGS}
                   volumeMounts:
                   - name: workspace
                     mountPath: /workspace
                   - name: docker-config
-                    mountPath: /kaniko/.docker
+                    mountPath: /docker-config
                   resources:
                     limits:
                       memory: "5Gi"

@@ -35,9 +35,6 @@ on:
       github-token:
         description: The GitHub token to use for authentication
         required: true
-      kubeconfig:
-        description: The Kubernetes configuration file
-        required: true
 
 jobs:
   update-image-version:
@@ -45,12 +42,6 @@ jobs:
     outputs:
       changes-detected: ${{ steps.version.outputs.changes-detected }}
     steps:
-      - name: Install required dependencies
-        run: |
-          echo "Installing git"
-          sudo apt-get update
-          sudo apt-get install -y git gh
-
       - name: Checkout infrastructures repo
         uses: actions/checkout@v2
         with:
@@ -108,29 +99,9 @@ jobs:
     runs-on: ${{ vars.RUNNER }}
     needs: update-image-version
     steps:
-      - name: Install required dependencies
+      - name: Verify cluster access (in-cluster RBAC)
         run: |
-          echo "Installing required dependencies for kubectl"
-          sudo apt-get update
-          sudo apt-get install -y apt-transport-https ca-certificates curl gnupg git
-
-          echo "Add kubectl gpg key"
-          sudo mkdir -p -m 755 /etc/apt/keyrings
-          curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-          sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-
-          echo "Add kubectl repo"
-          echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
-          sudo chmod 644 /etc/apt/sources.list.d/kubernetes.list
-
-          echo "Install kubectl"
-          sudo apt-get update
-          sudo apt-get install -y kubectl
-
-      - name: Setup kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{secrets.kubeconfig}}" > ~/.kube/config
+          # Runner pods already have kubectl and use the github-runner ServiceAccount via in-cluster config
           kubectl cluster-info
 
       - name: Verify image version

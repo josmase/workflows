@@ -137,23 +137,36 @@ jobs:
                     secretName: ${JOB_NAME}-creds
           EOF
 
-          # Wait for completion
           echo "Waiting for Job to start..."
           sleep 5
 
           # Stream logs while job is running
-          kubectl logs -f job/${JOB_NAME} -n ${NAMESPACE} &
+          kubectl logs -f job/${JOB_NAME} -n ${NAMESPACE} 2>/dev/null &
           LOG_PID=$!
 
-          # Wait for completion
-          if kubectl wait --for=condition=complete job/${JOB_NAME} -n ${NAMESPACE} --timeout=1h; then
-            wait ${LOG_PID} 2>/dev/null || true
-            echo "Build complete!"
-            kubectl delete job/${JOB_NAME} secret/${JOB_NAME}-creds configmap/${JOB_NAME}-context -n ${NAMESPACE}
-          else
-            wait ${LOG_PID} 2>/dev/null || true
-            echo "Build failed! Job logs:"
-            kubectl logs job/${JOB_NAME} -n ${NAMESPACE} --tail=100
-            kubectl delete job/${JOB_NAME} secret/${JOB_NAME}-creds configmap/${JOB_NAME}-context -n ${NAMESPACE}
-            exit 1
-          fi
+          # Wait for either completion or failure
+          while true; do
+            JOB_STATUS=$(kubectl get job/${JOB_NAME} -n ${NAMESPACE} -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}' 2>/dev/null || echo "")
+            JOB_FAILED=$(kubectl get job/${JOB_NAME} -n ${NAMESPACE} -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}' 2>/dev/null || echo "")
+            
+            if [ "$JOB_STATUS" = "True" ]; then
+              wait ${LOG_PID} 2>/dev/null || true
+              echo "Build complete!"
+              kubectl delete job/${JOB_NAME} secret/${JOB_NAME}-creds configmap/${JOB_NAME}-context -n ${NAMESPACE}
+              break
+            elif [ "$JOB_FAILED" = "True" ]; then
+              wait ${LOG_PID} 2>/dev/null || true
+              echo "Build failed! Job status:"
+              kubectl get job/${JOB_NAME} -n ${NAMESPACE} -o yaml | grep -A 10 "status:"
+              echo ""
+              echo "Pod status:"
+              kubectl get pods -l job-name=${JOB_NAME} -n ${NAMESPACE}
+              echo ""
+              echo "Last 50 lines of logs:"
+              kubectl logs job/${JOB_NAME} -n ${NAMESPACE} --tail=50
+              kubectl delete job/${JOB_NAME} secret/${JOB_NAME}-creds configmap/${JOB_NAME}-context -n ${NAMESPACE}
+              exit 1
+            fi
+            
+            sleep 5
+          done

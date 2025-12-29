@@ -102,11 +102,6 @@ jobs:
     runs-on: ${{ vars.RUNNER }}
     needs: update-image-version
     steps:
-      - name: Verify cluster access (in-cluster RBAC)
-        run: |
-          # Runner pods already have kubectl and use the github-runner ServiceAccount via in-cluster config
-          kubectl cluster-info
-
       - name: Verify image version
         run: |
           JSON_PATH="{.spec.template.spec.containers[0].image}" 

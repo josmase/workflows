@@ -1,6 +1,6 @@
 # Custom GitHub Actions runner image for Kubernetes Jobs + Kaniko
 # Base: official GitHub Actions runner
-FROM ghcr.io/actions/actions-runner:2.330.0
+FROM ghcr.io/actions/actions-runner:2.331.0@sha256:dced476aa42703ebd9aafc295ce52f160989c4528e831fc3be2aef83a1b3f6da
 
 USER root
 

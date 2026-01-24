@@ -53,7 +53,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          JOB_NAME="buildkit-$(date +%s)"
+          JOB_NAME="buildkit-$(date +%s)-${RANDOM}"
           NAMESPACE="${ACTIONS_RUNNER_POD_NAMESPACE:-arc-runners}"
           IMAGE_REF="${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
           CACHE_IMAGE="${CACHE_REPO:+${CACHE_REPO}/cache}"

@@ -39,7 +39,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build with Kaniko Job
+      - name: Build with buildkit
         env:
           REGISTRY_URL: ${{ inputs.registry_url }}
           REGISTRY_USERNAME: ${{ secrets.registry_username }}
@@ -53,17 +53,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          JOB_NAME="buildkit-$(date +%s)-${RANDOM}"
-          NAMESPACE="${ACTIONS_RUNNER_POD_NAMESPACE:-arc-runners}"
           IMAGE_REF="${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
           CACHE_IMAGE="${CACHE_REPO:+${CACHE_REPO}/cache}"
-          RUNNER_POD_NAME="${HOSTNAME}"
 
           echo "Building: ${IMAGE_REF}"
 
-          # Create docker config
-          mkdir -p /tmp/kaniko
-          cat > /tmp/kaniko/config.json <<EOF
+          # Create docker config for buildkit
+          mkdir -p ~/.docker
+          cat > ~/.docker/config.json <<EOF
           {
             "auths": {
               "${REGISTRY_URL}": {
@@ -74,115 +71,22 @@ jobs:
           }
           EOF
 
-          # Create secret for credentials only
-          kubectl create secret generic ${JOB_NAME}-creds \
-            --from-file=config.json=/tmp/kaniko/config.json \
-            -n ${NAMESPACE}
-
-          # BuildKit cache flags (registry-based)
+          # Build cache flags
           CACHE_FLAGS=""
           if [ "${CACHE_ENABLED}" = "true" ] && [ -n "${CACHE_IMAGE}" ]; then
             CACHE_FLAGS="--export-cache type=registry,ref=${CACHE_IMAGE},mode=max --import-cache type=registry,ref=${CACHE_IMAGE}"
           fi
 
-          # Create Job with direct workspace mount (no tarball needed)
-          cat <<EOF | kubectl apply -f -
-          apiVersion: batch/v1
-          kind: Job
-          metadata:
-            name: ${JOB_NAME}
-            namespace: ${NAMESPACE}
-          spec:
-            ttlSecondsAfterFinished: 300
-            backoffLimit: 0
-            template:
-              spec:
-                serviceAccountName: github-runner
-                restartPolicy: Never
-                containers:
-                - name: buildkit
-                  image: moby/buildkit:rootless
-                  env:
-                  - name: DOCKER_CONFIG
-                    value: /docker-config
-                  - name: BUILDKITD_FLAGS
-                    value: --oci-worker-no-process-sandbox
-                  securityContext:
-                    appArmorProfile:
-                      type: Unconfined
-                  command: ["/bin/sh", "-c"]
-                  args:
-                  - |
-                    set -e
-                    buildctl-daemonless.sh build \
-                      --frontend dockerfile.v0 \
-                      --local context=/workspace \
-                      --local dockerfile=/workspace \
-                      --opt filename=${DOCKERFILE} \
-                      --output type=image,name=${IMAGE_REF},push=${PUSH_ENABLED} \
-                      ${CACHE_FLAGS}
-                  volumeMounts:
-                  - name: workspace
-                    mountPath: /workspace
-                  - name: docker-config
-                    mountPath: /docker-config
-                  resources:
-                    limits:
-                      memory: "5Gi"
-                      cpu: "2"
-                volumes:
-                - name: workspace
-                  hostPath:
-                    path: ${GITHUB_WORKSPACE}
-                    type: Directory
-                - name: docker-config
-                  secret:
-                    secretName: ${JOB_NAME}-creds
-          EOF
-
-          echo "Job created: ${JOB_NAME}"
-          echo "Waiting for Job to complete..."
-          sleep 5
-
-          echo "Waiting for Job to start..."
-          sleep 5
-
-          # Stream logs while job is running
-          kubectl logs -f job/${JOB_NAME} -n ${NAMESPACE} 2>/dev/null &
-          LOG_PID=$!
-
-          # Wait for either completion or failure
-          while true; do
-            JOB_STATUS=$(kubectl get job/${JOB_NAME} -n ${NAMESPACE} -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}' 2>/dev/null || echo "")
-            JOB_FAILED=$(kubectl get job/${JOB_NAME} -n ${NAMESPACE} -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}' 2>/dev/null || echo "")
-            
-            if [ "$JOB_STATUS" = "True" ]; then
-              wait ${LOG_PID} 2>/dev/null || true
-              echo "Build complete!"
-              kubectl delete job/${JOB_NAME} secret/${JOB_NAME}-creds -n ${NAMESPACE}
-              break
-            elif [ "$JOB_FAILED" = "True" ]; then
-              wait ${LOG_PID} 2>/dev/null || true
-              echo "Build failed! Job status:"
-              kubectl get job/${JOB_NAME} -n ${NAMESPACE} -o yaml | grep -A 10 "status:"
-              echo ""
-              echo "Pod status:"
-              kubectl get pods -l batch.kubernetes.io/job-name=${JOB_NAME} -n ${NAMESPACE}
-              POD_NAME=$(kubectl get pods -l batch.kubernetes.io/job-name=${JOB_NAME} -n ${NAMESPACE} -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
-              if [ -n "$POD_NAME" ]; then
-                echo ""
-                echo "Pod describe:"
-                kubectl describe pod/${POD_NAME} -n ${NAMESPACE} || true
-                echo ""
-                echo "Last 50 lines of pod logs:"
-                kubectl logs ${POD_NAME} -n ${NAMESPACE} --tail=50 || true
-              fi
-              echo ""
-              echo "Last 50 lines of logs:"
-              kubectl logs job/${JOB_NAME} -n ${NAMESPACE} --tail=50
-              kubectl delete job/${JOB_NAME} secret/${JOB_NAME}-creds secret/${JOB_NAME}-context -n ${NAMESPACE}
-              exit 1
-            fi
-            
-            sleep 5
-          done
+          # Build directly with buildctl-daemonless
+          export DOCKER_CONFIG=~/.docker
+          export BUILDKITD_FLAGS="--oci-worker-no-process-sandbox"
+          
+          buildctl-daemonless.sh build \
+            --frontend dockerfile.v0 \
+            --local context=. \
+            --local dockerfile=. \
+            --opt filename=${DOCKERFILE} \
+            --output type=image,name=${IMAGE_REF},push=${PUSH_ENABLED} \
+            ${CACHE_FLAGS}
+          
+          echo "Build complete!"

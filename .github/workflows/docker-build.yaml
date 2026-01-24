@@ -57,6 +57,7 @@ jobs:
           NAMESPACE="${ACTIONS_RUNNER_POD_NAMESPACE:-arc-runners}"
           IMAGE_REF="${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
           CACHE_IMAGE="${CACHE_REPO:+${CACHE_REPO}/cache}"
+          RUNNER_POD_NAME="${HOSTNAME}"
 
           echo "Building: ${IMAGE_REF}"
 
@@ -73,9 +74,6 @@ jobs:
           }
           EOF
 
-          # Create tarball of source
-          tar czf /tmp/context.tar.gz -C ${GITHUB_WORKSPACE} .
-
           # Create secret for credentials only
           kubectl create secret generic ${JOB_NAME}-creds \
             --from-file=config.json=/tmp/kaniko/config.json \
@@ -87,7 +85,7 @@ jobs:
             CACHE_FLAGS="--export-cache type=registry,ref=${CACHE_IMAGE},mode=max --import-cache type=registry,ref=${CACHE_IMAGE}"
           fi
 
-          # Create Job with emptyDir volume (no size limit)
+          # Create Job with direct workspace mount (no tarball needed)
           cat <<EOF | kubectl apply -f -
           apiVersion: batch/v1
           kind: Job
@@ -101,13 +99,6 @@ jobs:
               spec:
                 serviceAccountName: github-runner
                 restartPolicy: Never
-                initContainers:
-                - name: prepare-context
-                  image: busybox:1.36
-                  command: ['sh', '-c', 'mkdir -p /workspace && chmod 777 /workspace']
-                  volumeMounts:
-                  - name: workspace
-                    mountPath: /workspace
                 containers:
                 - name: buildkit
                   image: moby/buildkit:rootless
@@ -123,7 +114,6 @@ jobs:
                   args:
                   - |
                     set -e
-                    tar xzf /context/context.tar.gz -C /workspace
                     buildctl-daemonless.sh build \
                       --frontend dockerfile.v0 \
                       --local context=/workspace \
@@ -132,8 +122,6 @@ jobs:
                       --output type=image,name=${IMAGE_REF},push=${PUSH_ENABLED} \
                       ${CACHE_FLAGS}
                   volumeMounts:
-                  - name: context
-                    mountPath: /context
                   - name: workspace
                     mountPath: /workspace
                   - name: docker-config
@@ -143,28 +131,18 @@ jobs:
                       memory: "5Gi"
                       cpu: "2"
                 volumes:
-                - name: context
-                  emptyDir:
-                    sizeLimit: 5Gi
                 - name: workspace
-                  emptyDir:
-                    sizeLimit: 10Gi
+                  hostPath:
+                    path: ${GITHUB_WORKSPACE}
+                    type: Directory
                 - name: docker-config
                   secret:
                     secretName: ${JOB_NAME}-creds
           EOF
 
           echo "Job created: ${JOB_NAME}"
-          echo "Uploading build context..."
-          
-          # Wait for pod to be ready
-          sleep 3
-          POD_NAME=$(kubectl get pods -l batch.kubernetes.io/job-name=${JOB_NAME} -n ${NAMESPACE} -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
-          
-          # Copy the tarball into the pod's context volume
-          if [ -n "$POD_NAME" ]; then
-            kubectl cp /tmp/context.tar.gz ${NAMESPACE}/${POD_NAME}:/context/context.tar.gz -c buildkit || true
-          fi
+          echo "Waiting for Job to complete..."
+          sleep 5
 
           echo "Waiting for Job to start..."
           sleep 5
@@ -202,7 +180,7 @@ jobs:
               echo ""
               echo "Last 50 lines of logs:"
               kubectl logs job/${JOB_NAME} -n ${NAMESPACE} --tail=50
-              kubectl delete job/${JOB_NAME} secret/${JOB_NAME}-creds -n ${NAMESPACE}
+              kubectl delete job/${JOB_NAME} secret/${JOB_NAME}-creds secret/${JOB_NAME}-context -n ${NAMESPACE}
               exit 1
             fi
             

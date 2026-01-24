@@ -95,7 +95,8 @@ jobs:
                 initContainers:
                 - name: wait-for-context
                   image: busybox:1.36
-                  command: ['sh', '-c', 'i=0; while [ $i -lt 120 ]; do if [ -f /context/context.tar.gz ]; then exit 0; fi; sleep 2; i=$((i+1)); done; echo "context missing" >&2; exit 1']
+                  # Note: escape $i to avoid expansion in the heredoc when set -u is enabled
+                  command: ['sh', '-c', 'i=0; while [ \$i -lt 120 ]; do if [ -f /context/context.tar.gz ]; then exit 0; fi; sleep 2; i=\$((i+1)); done; echo "context missing" >&2; exit 1']
                   volumeMounts:
                   - name: context
                     mountPath: /context

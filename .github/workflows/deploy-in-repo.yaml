@@ -1,0 +1,114 @@
+name: Update Image Version In-Repo and Wait for Deployment
+
+on:
+  workflow_call:
+    inputs:
+      image-version:
+        description: The new image version
+        required: true
+        type: string
+      image-name:
+        description: The name of the image to update
+        required: true
+        type: string
+      file-path:
+        description: The path to the file to update (relative to repo root)
+        required: true
+        type: string
+      namespace:
+        description: The namespace where the resource is running
+        required: true
+        type: string
+      kind:
+        description: The kind of Kubernetes resource (e.g. deployment, cronjob)
+        required: true
+        type: string
+      name:
+        description: The name of the Kubernetes resource
+        required: true
+        type: string
+
+jobs:
+  update-image-version:
+    runs-on: ${{ vars.RUNNER }}
+    steps:
+      - name: Checkout app repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
+
+      - name: Update image version
+        id: version
+        run: |
+          # Update the image version in the deployment manifest
+          sed -i -E "s|${{ inputs.image-name }}:v[0-9.]*(@sha256:[a-f0-9]*)?|${{ inputs.image-name }}:${{ inputs.image-version }}|g" ${{ inputs.file-path }}
+          # Handle case where the first regex didn't match (fall back to original pattern)
+          sed -i "s|${{ inputs.image-name }}:v[0-9.]*|${{ inputs.image-name }}:${{ inputs.image-version }}|g" ${{ inputs.file-path }}
+
+          if [[ $(git status --porcelain) ]]; then
+            echo "Changes detected"
+            git config --global user.name "github-actions"
+            git config --global user.email "github-actions@github.com"
+            git add ${{ inputs.file-path }}
+            git commit -m "deploy: update ${{ inputs.kind }}/${{ inputs.name }} to ${{ inputs.image-version }}"
+            git push
+            echo "changes-detected=true" >> $GITHUB_OUTPUT
+          else
+            echo "No changes detected"
+            echo "changes-detected=false" >> $GITHUB_OUTPUT
+          fi
+
+  verify-deployment:
+    runs-on: ${{ vars.RUNNER }}
+    needs: update-image-version
+    steps:
+      - name: Verify image version
+        run: |
+          JSON_PATH="{.spec.template.spec.containers[0].image}"
+          if [[ ${{ inputs.kind }} == "cronjob" ]]; then
+            JSON_PATH="{.spec.jobTemplate.spec.template.spec.containers[0].image}"
+          fi
+
+          while true; do
+            IMAGE_VERSION_CHECK=$(kubectl get ${{ inputs.kind }}/${{ inputs.name }} -n ${{ inputs.namespace }} -o jsonpath=${JSON_PATH})
+
+            if [[ $IMAGE_VERSION_CHECK =~ ${{ inputs.image-name }}:${{ inputs.image-version }} ]]; then
+              echo "Image version is updated to ${{ inputs.image-name }}:${{ inputs.image-version }}"
+              break
+            else
+              echo "Image version is not yet updated, current version is ${IMAGE_VERSION_CHECK}, retrying..."
+              sleep 30
+            fi
+          done
+        timeout-minutes: 5
+
+      - name: Wait for resource to be stable
+        run: |
+          if [ "${{ inputs.kind }}" = "cronjob" ]; then
+            echo "Verifying CronJob has been scheduled correctly..."
+            if kubectl get cronjob/${{ inputs.name }} -n ${{ inputs.namespace }} -o jsonpath='{.spec.suspend}' | grep -q "false"; then
+              SCHEDULE=$(kubectl get cronjob/${{ inputs.name }} -n ${{ inputs.namespace }} -o jsonpath='{.spec.schedule}')
+              if [ -n "$SCHEDULE" ]; then
+                echo "CronJob ${{ inputs.name }} exists and is properly scheduled with schedule: $SCHEDULE"
+                exit 0
+              else
+                echo "CronJob ${{ inputs.name }} doesn't have a valid schedule"
+                exit 1
+              fi
+            else
+              echo "CronJob ${{ inputs.name }} exists but is suspended"
+              exit 1
+            fi
+          else
+            while true; do
+              echo "Waiting for the resource to be available..."
+              if kubectl wait --for=condition=available --timeout=2s ${{ inputs.kind }}/${{ inputs.name }} -n ${{ inputs.namespace }}; then
+                echo "Resource is available!"
+                break
+              else
+                echo "Resource is not available yet, retrying..."
+                sleep 10
+              fi
+            done
+          fi
+        timeout-minutes: 5
